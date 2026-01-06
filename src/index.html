@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<!--
+    Chatooly Tool Template v2.0
+    Author: Yael Renous - Studio Video
+
+    ═══════════════════════════════════════════════════════════════════════════
+    🤖 AI AGENTS: REQUIRED READING BEFORE BUILDING ANY TOOL
+    ═══════════════════════════════════════════════════════════════════════════
+
+    1. READ AGENT-INSTRUCTIONS.md IN THIS DIRECTORY FIRST
+       - Contains all component patterns and class names
+       - Shows correct vs incorrect examples
+       - Includes validation checklist
+
+    2. VIEW THE WORKING DEMO:
+       https://yaelren.github.io/chatooly-cdn/component-demo.html
+       - This is what your tool should look like
+       - Compare your output to this reference
+
+    3. COPY THE EXAMPLES IN THIS FILE:
+       - Scroll down to see all control types properly implemented
+       - Use these as copy-paste templates
+       - Don't improvise or create your own patterns
+
+    4. KEY RULES:
+       ✅ Sections: chatooly-section-card + chatooly-section-header (auto-collapsible!)
+       ✅ Sliders: chatooly-slider-group + chatooly-slider-label + chatooly-slider
+       ✅ Toggles: <button class="chatooly-toggle">, NOT <input type="checkbox">
+       ✅ Colors: chatooly-color-group + chatooly-color-input
+       ❌ NEVER use old class names like "section-header" or "control-group"
+       ❌ NEVER create local style.css files (CDN handles all styling)
+
+    ═══════════════════════════════════════════════════════════════════════════
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- ========== EDIT THIS: Your Tool Name ========== -->
+    <title>TOOL NAMEy</title>
+    
+    <!-- ========== DO NOT EDIT: Required CDN Styles ========== -->
+    <link rel="stylesheet" href="https://yaelren.github.io/chatooly-cdn/css/unified.min.css?v=2.1">
+
+    <!-- Tool Layout Styles (AI sidebar is in shell.html) -->
+    <style>
+        /* Two-column layout for tool (no AI sidebar - it's in parent shell) */
+        .chatooly-app-container {
+            grid-template-columns: 300px 1fr !important;
+        }
+    </style>
+</head>
+<body>
+    <!-- ========== EDIT THIS: Update header title to match your tool ========== -->
+    <header class="chatooly-header">
+        <div class="chatooly-header-title">tool-name</div>
+        <div class="chatooly-header-credit">MADE WITH CHATOOLY</div>
+    </header>
+
+    <div class="chatooly-app-container">
+        <!-- Left Panel: Tool Controls -->
+        <div class="chatooly-controls-panel">
+            <!-- ========== EDIT THIS: Tool Description ========== -->
+            <div class="chatooly-controls-header">
+                <p>tool-description</p>
+            </div>
+            
+            <div class="chatooly-controls-content">
+                <!-- ========== CANVAS CONTROLS AUTO-INJECTED BY CDN ========== -->
+                <!-- The Chatooly CDN automatically injects canvas controls here when it detects chatooly-canvas -->
+
+                <!-- ========== EDIT BELOW: Add Your Custom Tool Controls Here ========== -->
+
+                <!-- ========== EXAMPLE CONTROLS (DELETE OR MODIFY AS NEEDED) ========== -->
+
+                <!-- Example Section with Multiple Control Types (Click header to collapse) -->
+                <div class="chatooly-section-card" data-section="examples">
+                    <h3 class="chatooly-section-header">🎨 Example Controls</h3>
+                    <div class="chatooly-section-content">
+
+                        <!-- Text Input Example -->
+                        <div class="chatooly-input-group">
+                            <label class="chatooly-input-label" for="example-text">Text Input</label>
+                            <input type="text" class="chatooly-input" id="example-text" value="Example Text" placeholder="Enter text...">
+                        </div>
+
+                        <!-- Slider Example -->
+                        <div class="chatooly-slider-group">
+                            <div class="chatooly-slider-label">
+                                <span>Slider (0-100)</span>
+                                <span class="chatooly-slider-value" id="example-slider-value">50</span>
+                            </div>
+                            <input type="range" class="chatooly-slider" id="example-slider" min="0" max="100" value="50">
+                        </div>
+
+                        <!-- Color Picker Example -->
+                        <div class="chatooly-color-group">
+                            <label class="chatooly-color-label" for="example-color">Color Picker</label>
+                            <input type="color" class="chatooly-color-input" id="example-color" value="#ff5500">
+                        </div>
+
+                        <!-- Dropdown Example -->
+                        <div class="chatooly-input-group">
+                            <label class="chatooly-input-label" for="example-select">Dropdown</label>
+                            <select class="chatooly-select" id="example-select">
+                                <option value="option1">Option 1</option>
+                                <option value="option2">Option 2</option>
+                                <option value="option3">Option 3</option>
+                            </select>
+                        </div>
+
+                        <!-- Toggle Switch Example -->
+                        <div class="chatooly-toggle-group">
+                            <button type="button" class="chatooly-toggle" id="example-toggle" role="switch" aria-pressed="false">
+                                <span class="chatooly-toggle-slider"></span>
+                            </button>
+                            <label class="chatooly-toggle-label" for="example-toggle">Enable Example Feature</label>
+                        </div>
+
+                        <!-- File Upload Example -->
+                        <div class="chatooly-upload-area" style="height: 100px;">
+                            <div class="chatooly-upload-icon">
+                                <svg viewBox="0 0 11 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M7.94444 0L11 3V11.4048C10.9998 11.5627 10.9358 11.7141 10.822 11.8257C10.7083 11.9373 10.554 12 10.3932 12H0.606833C0.446342 11.9989 0.292733 11.9359 0.179189 11.8245C0.0656443 11.7131 0.00128006 11.5624 0 11.4048V0.5952C0 0.2664 0.271944 0 0.606833 0H7.94444ZM6.11111 6H7.94444L5.5 3.6L3.05556 6H4.88889V8.4H6.11111V6Z" fill="var(--fill-0, #454545)"/>
+                                </svg>
+                            </div>
+                            <div class="chatooly-upload-text">Upload Image</div>
+                            <input type="file" class="chatooly-upload-input" id="example-file" accept="image/*">
+                        </div>
+
+                    </div>
+                </div>
+                <!-- ========== END EXAMPLE CONTROLS ========== -->
+
+                <!-- ========== BACKGROUND CONTROLS ========== -->
+                <div class="chatooly-section-card" data-section="background">
+                    <h3 class="chatooly-section-header">◼ Background</h3>
+                    <div class="chatooly-section-content">
+                        <!-- Transparent Background Toggle -->
+                        <div class="chatooly-toggle-group">
+                            <button type="button"
+                                    class="chatooly-toggle"
+                                    id="transparent-bg"
+                                    role="switch"
+                                    aria-pressed="false">
+                                <span class="chatooly-toggle-slider"></span>
+                            </button>
+                            <label class="chatooly-toggle-label" for="transparent-bg">Transparent Background</label>
+                        </div>
+
+                        <!-- Background Color Picker -->
+                        <div class="chatooly-color-group" id="bg-color-group">
+                            <label class="chatooly-color-label" for="bg-color">Background Color</label>
+                            <input type="color" class="chatooly-color-input" id="bg-color" value="#FFFFFF">
+                        </div>
+
+                        <!-- Background Image Upload -->
+                        <div style="position: relative;">
+                            <div class="chatooly-upload-area" style="height: 80px;">
+                                <div class="chatooly-upload-icon">
+                                    <svg viewBox="0 0 11 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M7.94444 0L11 3V11.4048C10.9998 11.5627 10.9358 11.7141 10.822 11.8257C10.7083 11.9373 10.554 12 10.3932 12H0.606833C0.446342 11.9989 0.292733 11.9359 0.179189 11.8245C0.0656443 11.7131 0.00128006 11.5624 0 11.4048V0.5952C0 0.2664 0.271944 0 0.606833 0H7.94444ZM6.11111 6H7.94444L5.5 3.6L3.05556 6H4.88889V8.4H6.11111V6Z" fill="var(--fill-0, #454545)"/>
+                                    </svg>
+                                </div>
+                                <div class="chatooly-upload-text">Background Image</div>
+                                <input type="file" class="chatooly-upload-input" id="bg-image" accept="image/*">
+                            </div>
+                            <button id="clear-bg-image"
+                                    type="button"
+                                    class="chatooly-btn"
+                                    style="display: none; position: absolute; top: 8px; right: 8px; padding: 4px 8px; min-width: auto; z-index: 10;"
+                                    title="Remove image">×</button>
+                        </div>
+
+                        <!-- Image Fit Dropdown -->
+                        <div class="chatooly-input-group" id="bg-fit-group" style="display: none;">
+                            <label class="chatooly-input-label" for="bg-fit">Image Fit</label>
+                            <select class="chatooly-select" id="bg-fit">
+                                <option value="cover">Fill Frame</option>
+                                <option value="contain">Fit in Frame</option>
+                                <option value="fill">Stretch to Fill</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <!-- ========== END BACKGROUND CONTROLS ========== -->
+
+                <!-- ========== END EDIT SECTION ========== -->
+            </div>
+        </div>
+        
+        <!-- Right Panel: Preview/Canvas Area -->
+        <div class="chatooly-preview-panel">
+            <!-- ========== DO NOT EDIT: Required Export Container ========== -->
+            <div id="chatooly-container">
+                <!-- ========== EDIT BELOW: Add Your Visual Output Here ========== -->
+                <!-- This content will be exported as PNG/Video -->
+                <!-- IMPORTANT: Your main canvas MUST have id="chatooly-canvas" -->
+                <!-- For animations: CDN automatically detects canvas animations and provides video export options -->
+                <canvas id="chatooly-canvas"></canvas>
+                <!-- ========== END EDIT SECTION ========== -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- ========== DO NOT EDIT: Chatooly CDN v2.0 Integration ========== -->
+    <!-- This script automatically provides: Dark theme styling + Static/Video export functionality -->
+    <!-- Video support: Detects p5.js, Three.js, Canvas animations and provides MediaRecorder API export -->
+    <script src="https://yaelren.github.io/chatooly-cdn/js/core.min.js?v=2.1"></script>
+    
+    <!-- ========== DO NOT EDIT: Chatooly Configuration ========== -->
+    <script src="js/chatooly-config.js"></script>
+
+    <!-- ========== DO NOT EDIT: UI Controls ========== -->
+    <script src="js/ui.js"></script>
+
+    <!-- ========== DO NOT EDIT: Your Tool Logic ========== -->
+    <script src="js/main.js"></script>
+
+    <!-- ========== Tool IPC (communication with parent shell) ========== -->
+    <script src="js/tool-ipc.js"></script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+# Preserve executable permissions for macOS launcher
+*.command -diff
+
+# Windows batch file (CRLF line endings)
+*.bat text eol=crlf

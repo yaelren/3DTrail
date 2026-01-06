@@ -1,0 +1,23 @@
+{
+  "name": "chatooly-tool-template",
+  "version": "2.0.0",
+  "description": "Template for creating Chatooly design tools with AI-powered builder",
+  "author": "Yael Renous - Studio Video",
+  "type": "module",
+  "scripts": {
+    "start": "lsof -ti:3001 | xargs kill -9 2>/dev/null; node server/index.js",
+    "server": "node server/index.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.1.2",
+    "chokidar": "^3.5.3",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "ws": "^8.14.2",
+    "zod": "^3.22.4"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

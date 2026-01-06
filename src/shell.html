@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<!--
+    Chatooly Shell - Persistent AI Chat Container
+
+    This is the parent container that NEVER refreshes.
+    - AI sidebar lives here (WebSocket persists)
+    - Tool loads in iframe (can refresh independently)
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatooly AI Builder</title>
+
+    <!-- Chatooly CDN for base styles -->
+    <link rel="stylesheet" href="https://yaelren.github.io/chatooly-cdn/css/unified.min.css?v=2.1">
+
+    <style>
+        /* CSS Variables for sidebar */
+        :root {
+            --sidebar-width: 400px;
+            --sidebar-min-width: 280px;
+            --sidebar-max-width: 600px;
+            --sidebar-current-width: 400px;
+
+            /* Light theme colors for sidebar (default) */
+            --sidebar-bg: #ffffff;
+            --sidebar-surface: #f5f5f5;
+            --sidebar-text: #1a1a1a;
+            --sidebar-text-muted: #666666;
+            --sidebar-border: #e0e0e0;
+            --sidebar-user-bg: #d9e5d7;
+            --sidebar-user-text: #1a1a1a;
+        }
+
+        /* Dark theme */
+        .shell-container.dark-theme {
+            --sidebar-bg: #1a1a1a;
+            --sidebar-surface: #2a2a2a;
+            --sidebar-text: #ffffff;
+            --sidebar-text-muted: #888888;
+            --sidebar-border: #333333;
+            --sidebar-user-bg: #d9e5d7;
+            --sidebar-user-text: #1a1a1a;
+        }
+
+        /* Shell Layout */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            background: var(--chatooly-color-bg, #0a0a0a);
+        }
+
+        .shell-container {
+            display: flex;
+            height: 100%;
+            width: 100%;
+        }
+
+        /* Tool iframe - takes all space except sidebar */
+        #tool-frame {
+            flex: 1;
+            border: none;
+            height: 100%;
+            background: var(--chatooly-color-bg, #0a0a0a);
+        }
+
+        /* AI Sidebar - Light Theme */
+        .chatooly-ai-sidebar {
+            position: relative;
+            width: var(--sidebar-current-width, 400px);
+            min-width: var(--sidebar-min-width);
+            max-width: var(--sidebar-max-width);
+            flex-shrink: 0;
+            background: var(--sidebar-bg);
+            border-left: 1px solid var(--sidebar-border);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            overflow: hidden;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+        }
+
+        .shell-container.ai-sidebar-collapsed .chatooly-ai-sidebar {
+            width: 0;
+            min-width: 0;
+            transform: translateX(100%);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* Resize handle */
+        .ai-sidebar-resize-handle {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 6px;
+            cursor: ew-resize;
+            background: transparent;
+            transition: background 0.2s;
+            z-index: 10;
+        }
+
+        .ai-sidebar-resize-handle:hover,
+        .ai-sidebar-resize-handle.resizing {
+            background: var(--chatooly-color-primary, #4a90d9);
+        }
+
+        /* Overlay to capture mouse events during resize (prevents iframe from stealing events) */
+        .resize-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 9999;
+            cursor: ew-resize;
+            display: none;
+        }
+
+        .resize-overlay.active {
+            display: block;
+        }
+
+        /* Toggle button */
+        .ai-sidebar-toggle {
+            position: fixed;
+            right: var(--sidebar-current-width, 400px);
+            top: 50%;
+            transform: translateY(-50%);
+            width: 24px;
+            height: 48px;
+            background: var(--sidebar-bg);
+            border: 1px solid var(--sidebar-border);
+            border-right: none;
+            border-radius: 6px 0 0 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            transition: right 0.3s ease, background 0.2s;
+        }
+
+        .ai-sidebar-toggle:hover {
+            background: var(--sidebar-surface);
+        }
+
+        .ai-sidebar-toggle svg {
+            width: 20px;
+            height: 20px;
+            transition: transform 0.3s ease;
+            transform: rotate(180deg);
+        }
+
+        .ai-sidebar-toggle svg path {
+            stroke: var(--sidebar-text);
+        }
+
+        .shell-container.ai-sidebar-collapsed .ai-sidebar-toggle {
+            right: 0;
+        }
+
+        .shell-container.ai-sidebar-collapsed .ai-sidebar-toggle svg {
+            transform: rotate(0deg);
+        }
+
+        /* Header actions */
+        .ai-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .ai-btn-icon {
+            background: transparent;
+            border: 1px solid var(--sidebar-border);
+            border-radius: 4px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        .ai-btn-icon:hover {
+            background: var(--sidebar-surface);
+        }
+
+        /* Typing indicator - fixed above input */
+        .ai-typing-indicator {
+            display: none;
+            align-items: center;
+            gap: 4px;
+            padding: 8px 16px;
+            color: var(--sidebar-text-muted);
+            font-size: 13px;
+            background: var(--sidebar-bg);
+            border-top: 1px solid var(--sidebar-border);
+        }
+
+        .ai-typing-indicator.visible {
+            display: flex;
+        }
+
+        /* Collapsible AI responses */
+        .ai-message.assistant {
+            position: relative;
+        }
+
+        .ai-message-collapse {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: transparent;
+            border: none;
+            color: var(--sidebar-text-muted);
+            cursor: pointer;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+
+        .ai-message-collapse:hover {
+            opacity: 1;
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        .ai-message.assistant.collapsed .ai-message-content {
+            max-height: 40px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .ai-message.assistant.collapsed .ai-message-content::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 20px;
+            background: linear-gradient(transparent, var(--sidebar-surface));
+        }
+
+        .ai-typing-dots {
+            display: flex;
+            gap: 3px;
+        }
+
+        .ai-typing-dots span {
+            width: 6px;
+            height: 6px;
+            background: var(--sidebar-text-muted);
+            border-radius: 50%;
+            animation: typing-bounce 1.4s infinite ease-in-out both;
+        }
+
+        .ai-typing-dots span:nth-child(1) { animation-delay: 0s; }
+        .ai-typing-dots span:nth-child(2) { animation-delay: 0.16s; }
+        .ai-typing-dots span:nth-child(3) { animation-delay: 0.32s; }
+
+        @keyframes typing-bounce {
+            0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+
+        /* Loading overlay for tool iframe */
+        #tool-loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: var(--sidebar-current-width, 400px);
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+        }
+
+        .shell-container.ai-sidebar-collapsed #tool-loading-overlay {
+            right: 0; /* Full width when sidebar collapsed */
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #333;
+            border-top-color: var(--chatooly-color-primary, #4a90d9);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .loading-text {
+            margin-top: 16px;
+            color: var(--chatooly-color-text, #fff);
+            font-size: 14px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .ai-sidebar-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--sidebar-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .ai-sidebar-header h3 {
+            margin: 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--sidebar-text);
+        }
+
+        .ai-status {
+            font-size: 11px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+
+        .ai-status.disconnected {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .ai-status.connected {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .ai-status.thinking {
+            background: #fff8e1;
+            color: #f57f17;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .ai-messages {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        /* Custom scrollbar for light theme */
+        .ai-messages::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .ai-messages::-webkit-scrollbar-track {
+            background: var(--sidebar-surface);
+        }
+
+        .ai-messages::-webkit-scrollbar-thumb {
+            background: #ccc;
+            border-radius: 4px;
+        }
+
+        .ai-messages::-webkit-scrollbar-thumb:hover {
+            background: #aaa;
+        }
+
+        .ai-message {
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            line-height: 1.5;
+            max-width: 100%;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            word-break: break-word;
+            white-space: pre-wrap;
+            box-sizing: border-box;
+        }
+
+        .ai-message.user {
+            background: var(--sidebar-user-bg);
+            color: var(--sidebar-user-text);
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+
+        .ai-message.assistant {
+            background: var(--sidebar-surface);
+            color: var(--sidebar-text);
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+
+        .ai-message.system {
+            background: transparent;
+            color: var(--sidebar-text-muted);
+            font-size: 11px;
+            text-align: center;
+            align-self: center;
+            padding: 8px;
+        }
+
+        .ai-message.error {
+            background: #ffebee;
+            color: #c62828;
+            border: 1px solid #ffcdd2;
+        }
+
+        .ai-message.tool-use {
+            background: transparent;
+            color: #999999;
+            font-size: 11px;
+            font-family: inherit;
+            padding: 4px 12px;
+            font-style: italic;
+        }
+
+        /* Dark theme tool-use */
+        .shell-container.dark-theme .ai-message.tool-use {
+            color: #666666;
+        }
+
+        /* Thinking/Reasoning Section - Collapsible */
+        .ai-thinking-section {
+            margin-bottom: 10px;
+            padding: 8px 10px;
+            background: rgba(99, 102, 241, 0.08);
+            border-radius: 6px;
+            font-size: 12px;
+            border-left: 3px solid #6366f1;
+        }
+
+        .ai-thinking-section summary {
+            cursor: pointer;
+            color: var(--sidebar-text-muted);
+            font-style: italic;
+            font-size: 11px;
+            user-select: none;
+        }
+
+        .ai-thinking-section summary:hover {
+            color: var(--sidebar-text);
+        }
+
+        .ai-thinking-section[open] summary {
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+        }
+
+        .ai-thinking-content {
+            color: var(--sidebar-text-muted);
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 11px;
+            line-height: 1.5;
+        }
+
+        /* Dark theme thinking section */
+        .shell-container.dark-theme .ai-thinking-section {
+            background: rgba(99, 102, 241, 0.12);
+        }
+
+        .ai-message pre {
+            margin: 8px 0 0 0;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.05);
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 11px;
+        }
+
+        .ai-message code {
+            font-family: 'Monaco', 'Consolas', monospace;
+        }
+
+        .ai-input-area {
+            padding: 16px;
+            border-top: 1px solid var(--sidebar-border);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .ai-input-area textarea {
+            width: 100%;
+            min-height: 80px;
+            max-height: 200px;
+            padding: 12px;
+            border: 1px solid var(--sidebar-border);
+            border-radius: 8px;
+            background: var(--sidebar-bg);
+            color: var(--sidebar-text);
+            font-size: 13px;
+            font-family: inherit;
+            resize: vertical;
+            box-sizing: border-box;
+        }
+
+        .ai-input-area textarea:focus {
+            outline: none;
+            border-color: var(--chatooly-color-primary, #4a90d9);
+        }
+
+        .ai-input-area textarea::placeholder {
+            color: var(--sidebar-text-muted);
+        }
+
+        .ai-input-buttons {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .ai-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .ai-btn-primary {
+            background: var(--chatooly-color-primary, #4a90d9);
+            color: #fff;
+        }
+
+        .ai-btn-primary:hover:not(:disabled) {
+            background: var(--chatooly-color-primary-hover, #5aa0e9);
+        }
+
+        .ai-btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .ai-btn-secondary {
+            background: transparent;
+            color: var(--sidebar-text-muted);
+            border: 1px solid var(--sidebar-border);
+        }
+
+        .ai-btn-secondary:hover {
+            background: var(--sidebar-surface);
+        }
+
+        .ai-btn-danger {
+            background: #dc3545;
+            color: #fff;
+        }
+
+        .ai-btn-danger:hover:not(:disabled) {
+            background: #c82333;
+        }
+
+        .ai-btn-danger:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Image Attachments */
+        .ai-attachments {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 0;
+            margin-bottom: 8px;
+        }
+
+        .ai-attachments:empty {
+            display: none;
+        }
+
+        .ai-attachment-preview {
+            position: relative;
+            width: 60px;
+            height: 60px;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid var(--sidebar-border);
+        }
+
+        .ai-attachment-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .ai-attachment-remove {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 18px;
+            height: 18px;
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 12px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .ai-attachment-remove:hover {
+            background: rgba(200, 0, 0, 0.8);
+        }
+
+        .ai-input-row {
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
+        }
+
+        .ai-input-row textarea {
+            flex: 1;
+        }
+
+        .ai-input-row .ai-btn-icon {
+            flex-shrink: 0;
+            height: 42px;
+            width: 42px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        /* Welcome message */
+        .ai-welcome {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--sidebar-text-muted);
+        }
+
+        .ai-welcome h4 {
+            margin: 0 0 8px 0;
+            color: var(--sidebar-text);
+            font-size: 16px;
+        }
+
+        .ai-welcome p {
+            margin: 0;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        /* Emoji Hover Effects */
+        .emoji-hover {
+            position: relative;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .emoji-hover::after {
+            content: attr(data-emoji);
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: inherit;
+            opacity: 0;
+            transform: scale(0.8);
+            transition: all 0.3s ease;
+            font-size: 1.2em;
+        }
+
+        .emoji-hover:hover::after {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .emoji-hover:hover {
+            color: transparent;
+        }
+
+        /* Special styling for shell elements */
+        .ai-sidebar-header h3.emoji-hover:hover::after {
+            font-size: 1.4em;
+        }
+
+        .ai-welcome h4.emoji-hover:hover::after {
+            font-size: 1.6em;
+        }
+
+        .ai-btn.emoji-hover:hover::after {
+            font-size: 1.1em;
+        }
+
+        /* Responsive: hide sidebar on small screens */
+        @media (max-width: 900px) {
+            .chatooly-ai-sidebar {
+                display: none;
+            }
+            .ai-sidebar-toggle {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell-container" id="shell-container">
+        <!-- Resize overlay - captures mouse events during sidebar resize -->
+        <div class="resize-overlay" id="resize-overlay"></div>
+
+        <!-- Tool iframe - loads index.html (agent edits this file) -->
+        <iframe id="tool-frame" src="index.html"></iframe>
+
+        <!-- Loading overlay for tool (shown when agent is editing files) -->
+        <div id="tool-loading-overlay">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Updating tool...</div>
+        </div>
+
+        <!-- AI Sidebar Toggle Button -->
+        <button class="ai-sidebar-toggle" id="ai-sidebar-toggle" title="Toggle AI Sidebar">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </button>
+
+        <!-- AI Sidebar (persists across tool refreshes) -->
+        <div class="chatooly-ai-sidebar">
+            <!-- Resize handle - drag to resize sidebar -->
+            <div class="ai-sidebar-resize-handle" id="ai-resize-handle"></div>
+
+            <div class="ai-sidebar-header">
+                <h3>AI Tool Builder</h3>
+                <div class="ai-header-actions">
+                    <button class="ai-btn-icon" id="ai-theme-toggle" title="Toggle dark/light mode">🌙</button>
+                    <button class="ai-btn-icon" id="ai-reset" title="Reset to blank template">🔄</button>
+                    <span class="ai-status disconnected" id="ai-status">Disconnected</span>
+                </div>
+            </div>
+
+            <div class="ai-messages" id="ai-messages">
+                <div class="ai-welcome">
+                    <h4>Welcome to Chatooly AI</h4>
+                    <p>Describe the tool you want to build, and I'll create it for you following all Chatooly conventions.</p>
+                    <p style="margin-top: 12px; font-size: 11px;">Examples:<br>
+                    "Create a gradient generator"<br>
+                    "Build a mandala pattern tool"<br>
+                    "Make a color palette picker"</p>
+                </div>
+            </div>
+
+            <!-- Typing indicator (fixed above input) -->
+            <div class="ai-typing-indicator" id="ai-typing">
+                <span>AI is working</span>
+                <div class="ai-typing-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+
+            <div class="ai-input-area">
+                <!-- Image attachment previews -->
+                <div class="ai-attachments" id="ai-attachments"></div>
+                <!-- Input row with attach button and textarea -->
+                <div class="ai-input-row">
+                    <button class="ai-btn-icon" id="ai-attach" title="Attach image">📎</button>
+                    <input type="file" id="ai-file-input" accept="image/*" multiple hidden>
+                    <textarea
+                        id="ai-input"
+                        placeholder="Describe the tool you want to build..."
+                        rows="3"
+                    ></textarea>
+                </div>
+                <div class="ai-input-buttons">
+                    <button class="ai-btn ai-btn-secondary" id="ai-clear" title="Clear conversation">Clear</button>
+                    <button class="ai-btn ai-btn-primary" id="ai-send" disabled>Send</button>
+                    <button class="ai-btn ai-btn-danger" id="ai-stop" style="display: none;">Stop</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Shell AI Sidebar Script (modified to refresh iframe, not page) -->
+    <script src="js/shell-ai-sidebar.js"></script>
+</body>
+</html>
