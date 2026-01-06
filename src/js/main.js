@@ -1066,7 +1066,7 @@ function createCustomMaterial() {
 
             // Rim light (Fresnel effect)
             vec3 rimViewDir = normalize(vViewPosition);
-            float rimFactor = 1.0 - max(0.0, dot(normalize(vNormal), rimViewDir));
+            float rimFactor = 1.0 - max(0.0, dot(normal, rimViewDir));
             rimFactor = pow(rimFactor, 2.0);
             outgoingLight += rimColor * rimFactor * rimIntensity;
 
