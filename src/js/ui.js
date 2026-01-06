@@ -126,6 +126,185 @@ function initUIControls() {
             }
         });
     }
+
+    // ========== MATERIAL (MATCAP) CONTROLS ==========
+    const materialToggle = document.getElementById('material-enabled');
+    if (materialToggle) {
+        materialToggle.addEventListener('click', () => {
+            const isPressed = materialToggle.getAttribute('aria-pressed') === 'true';
+            const newState = !isPressed;
+            materialToggle.setAttribute('aria-pressed', newState);
+
+            const controlsGroup = document.getElementById('material-controls-group');
+            if (controlsGroup) controlsGroup.style.display = newState ? 'block' : 'none';
+
+            if (window.trailTool?.toggleMaterialMode) {
+                window.trailTool.toggleMaterialMode(newState);
+            }
+
+            // Update preview when enabling
+            if (newState) {
+                setTimeout(updateMaterialPreview, 100);
+            }
+        });
+    }
+
+    // Preview canvas setup
+    const previewCanvas = document.getElementById('matcap-preview');
+    function updateMaterialPreview() {
+        if (!settings.materialEnabled) return;
+
+        const sourceCanvas = window.trailTool?.getMatcapPreview?.();
+        if (previewCanvas && sourceCanvas) {
+            const ctx = previewCanvas.getContext('2d');
+            ctx.clearRect(0, 0, 80, 80);
+            ctx.drawImage(sourceCanvas, 0, 0, 80, 80);
+        }
+
+        if (window.trailTool?.updateMaterial) {
+            window.trailTool.updateMaterial();
+        }
+    }
+
+    // Gradient type dropdown
+    const gradientType = document.getElementById('gradient-type');
+    if (gradientType) {
+        gradientType.addEventListener('change', (e) => {
+            settings.gradientType = e.target.value;
+            updateMaterialPreview();
+        });
+    }
+
+    // Gradient stops setup
+    function setupGradientStops() {
+        const stops = document.querySelectorAll('.gradient-stop');
+        stops.forEach((stop, index) => {
+            const colorInput = stop.querySelector('.gradient-color');
+            const positionInput = stop.querySelector('.gradient-position');
+            const positionValue = stop.querySelector('.gradient-position-value');
+
+            if (colorInput) {
+                colorInput.addEventListener('input', (e) => {
+                    if (settings.gradientStops[index]) {
+                        settings.gradientStops[index].color = e.target.value;
+                        updateMaterialPreview();
+                    }
+                });
+            }
+
+            if (positionInput) {
+                positionInput.addEventListener('input', (e) => {
+                    const val = parseInt(e.target.value);
+                    if (settings.gradientStops[index]) {
+                        settings.gradientStops[index].position = val;
+                        if (positionValue) positionValue.textContent = val + '%';
+                        updateMaterialPreview();
+                    }
+                });
+            }
+        });
+    }
+    setupGradientStops();
+
+    // Add gradient stop button
+    const addStopBtn = document.getElementById('add-gradient-stop');
+    if (addStopBtn) {
+        addStopBtn.addEventListener('click', () => {
+            if (settings.gradientStops.length >= 6) return; // Max 6 stops
+            settings.gradientStops.push({ color: '#888888', position: 50 });
+            rebuildGradientStopsUI();
+            updateMaterialPreview();
+        });
+    }
+
+    // Remove gradient stop button
+    const removeStopBtn = document.getElementById('remove-gradient-stop');
+    if (removeStopBtn) {
+        removeStopBtn.addEventListener('click', () => {
+            if (settings.gradientStops.length <= 2) return; // Min 2 stops
+            settings.gradientStops.pop();
+            rebuildGradientStopsUI();
+            updateMaterialPreview();
+        });
+    }
+
+    // Light position slider
+    setupSlider('light-position', 'lightPosition', settings);
+    const lightPosSlider = document.getElementById('light-position');
+    if (lightPosSlider) {
+        lightPosSlider.addEventListener('input', updateMaterialPreview);
+    }
+
+    // Light intensity slider
+    setupSlider('light-intensity', 'lightIntensity', settings);
+    const lightIntSlider = document.getElementById('light-intensity');
+    if (lightIntSlider) {
+        lightIntSlider.addEventListener('input', updateMaterialPreview);
+    }
+
+    // Rim light toggle
+    setupToggle('rim-enabled', 'rimEnabled', settings, 'rim-controls');
+    const rimToggle = document.getElementById('rim-enabled');
+    if (rimToggle) {
+        rimToggle.addEventListener('click', () => {
+            setTimeout(updateMaterialPreview, 0);
+        });
+    }
+
+    // Rim intensity slider
+    setupSlider('rim-intensity', 'rimIntensity', settings);
+    const rimIntSlider = document.getElementById('rim-intensity');
+    if (rimIntSlider) {
+        rimIntSlider.addEventListener('input', updateMaterialPreview);
+    }
+
+    // Rim color picker
+    const rimColor = document.getElementById('rim-color');
+    if (rimColor) {
+        rimColor.addEventListener('input', (e) => {
+            settings.rimColor = e.target.value;
+            updateMaterialPreview();
+        });
+    }
+
+    // Shader mode dropdown
+    const shaderMode = document.getElementById('shader-mode');
+    if (shaderMode) {
+        shaderMode.addEventListener('change', (e) => {
+            settings.shaderMode = e.target.value;
+            // Need to recreate material for flatShading change
+            if (settings.materialEnabled && window.trailTool?.toggleMaterialMode) {
+                window.trailTool.toggleMaterialMode(false);
+                window.trailTool.toggleMaterialMode(true);
+            }
+        });
+    }
+
+    // Helper function to rebuild gradient stops UI dynamically
+    function rebuildGradientStopsUI() {
+        const container = document.getElementById('gradient-stops-container');
+        if (!container) return;
+
+        // Keep the label
+        const label = container.querySelector('.chatooly-input-label');
+        container.innerHTML = '';
+        if (label) container.appendChild(label);
+
+        settings.gradientStops.forEach((stop, index) => {
+            const div = document.createElement('div');
+            div.className = 'gradient-stop';
+            div.dataset.index = index;
+            div.style.cssText = 'display: flex; gap: 8px; margin-bottom: 8px; align-items: center;';
+            div.innerHTML = `
+                <input type="color" class="gradient-color" value="${stop.color}" style="width: 40px; height: 30px;">
+                <input type="range" class="chatooly-slider gradient-position" min="0" max="100" value="${stop.position}" style="flex: 1;">
+                <span class="gradient-position-value" style="min-width: 35px;">${stop.position}%</span>
+            `;
+            container.appendChild(div);
+        });
+
+        setupGradientStops();
+    }
 }
 
 // ========== HELPER FUNCTIONS ==========

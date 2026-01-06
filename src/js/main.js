@@ -59,7 +59,22 @@ const settings = {
     tumbleEnabled: false,
     tumbleSpeed: 1.0,
     bounceEnabled: false,
-    bounceHeight: -3
+    bounceHeight: -3,
+
+    // Material settings (MatCap style)
+    materialEnabled: false,
+    gradientStops: [
+        { color: '#ff6b6b', position: 0 },
+        { color: '#4ecdc4', position: 50 },
+        { color: '#45b7d1', position: 100 }
+    ],
+    gradientType: 'radial',
+    lightPosition: 0.5,
+    lightIntensity: 1.0,
+    rimEnabled: true,
+    rimColor: '#ffffff',
+    rimIntensity: 0.5,
+    shaderMode: 'reflective'  // 'reflective' or 'toon'
 };
 
 // ========== THREE.JS SETUP ==========
@@ -73,6 +88,11 @@ let particlePool = null;
 let loadedGeometry = null;
 let loadedMaterial = null;
 let isModelLoaded = false;
+
+// ========== MATCAP MATERIAL SYSTEM ==========
+let matcapGenerator = null;
+let customMaterial = null;
+let originalMaterial = null;  // Store original for toggling back
 
 // ========== DEFAULT MODEL ==========
 const DEFAULT_MODEL_PATH = 'assets/musa.glb';
@@ -296,6 +316,9 @@ function init() {
 
     // Initialize background system
     initBackgroundSystem();
+
+    // Initialize material system
+    initMaterialSystem();
 
     // Start animation loop
     animate();
@@ -990,6 +1013,133 @@ function updateBackground() {
     }
 }
 
+// ========== MATCAP MATERIAL SYSTEM ==========
+function initMaterialSystem() {
+    if (window.MatCapGenerator) {
+        matcapGenerator = new MatCapGenerator(256);
+        console.log('3D Trail: MatCap material system initialized');
+    }
+}
+
+function createCustomMaterial() {
+    if (!matcapGenerator) return null;
+
+    const texture = matcapGenerator.generate(
+        settings.gradientStops,
+        settings.gradientType,
+        settings.lightPosition
+    );
+
+    const material = new THREE.MeshMatcapMaterial({
+        matcap: texture,
+        side: THREE.DoubleSide,
+        flatShading: settings.shaderMode === 'toon'
+    });
+
+    // Extend with rim light via onBeforeCompile (Three.js pattern)
+    material.onBeforeCompile = (shader) => {
+        shader.uniforms.rimColor = { value: new THREE.Color(settings.rimColor) };
+        shader.uniforms.rimIntensity = { value: settings.rimEnabled ? settings.rimIntensity : 0 };
+        shader.uniforms.lightIntensity = { value: settings.lightIntensity };
+        shader.uniforms.toonMode = { value: settings.shaderMode === 'toon' ? 1 : 0 };
+
+        // Inject uniforms after #include <common>
+        shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <common>',
+            `#include <common>
+            uniform vec3 rimColor;
+            uniform float rimIntensity;
+            uniform float lightIntensity;
+            uniform int toonMode;`
+        );
+
+        // Add rim light + toon effect before opaque_fragment
+        shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <opaque_fragment>',
+            `// Apply light intensity
+            outgoingLight *= lightIntensity;
+
+            // Toon posterization
+            if (toonMode == 1) {
+                outgoingLight = floor(outgoingLight * 4.0) / 4.0;
+            }
+
+            // Rim light (Fresnel effect)
+            vec3 rimViewDir = normalize(vViewPosition);
+            float rimFactor = 1.0 - max(0.0, dot(normalize(vNormal), rimViewDir));
+            rimFactor = pow(rimFactor, 2.0);
+            outgoingLight += rimColor * rimFactor * rimIntensity;
+
+            #include <opaque_fragment>`
+        );
+
+        // Store reference for uniform updates
+        material.userData.shader = shader;
+    };
+
+    return material;
+}
+
+function updateMaterial() {
+    if (!settings.materialEnabled || !particlePool?.instancedMesh || !matcapGenerator) return;
+
+    // Regenerate matcap texture
+    const texture = matcapGenerator.generate(
+        settings.gradientStops,
+        settings.gradientType,
+        settings.lightPosition
+    );
+
+    if (customMaterial) {
+        // Update matcap texture
+        if (customMaterial.matcap) {
+            customMaterial.matcap.dispose();
+        }
+        customMaterial.matcap = texture;
+        customMaterial.flatShading = settings.shaderMode === 'toon';
+        customMaterial.needsUpdate = true;
+
+        // Update uniforms if shader compiled
+        if (customMaterial.userData.shader) {
+            const uniforms = customMaterial.userData.shader.uniforms;
+            uniforms.rimColor.value.set(settings.rimColor);
+            uniforms.rimIntensity.value = settings.rimEnabled ? settings.rimIntensity : 0;
+            uniforms.lightIntensity.value = settings.lightIntensity;
+            uniforms.toonMode.value = settings.shaderMode === 'toon' ? 1 : 0;
+        }
+    }
+}
+
+function toggleMaterialMode(enabled) {
+    settings.materialEnabled = enabled;
+    if (!particlePool?.instancedMesh) return;
+
+    if (enabled) {
+        // Store original material and apply custom
+        if (!originalMaterial) {
+            originalMaterial = particlePool.instancedMesh.material;
+        }
+        customMaterial = createCustomMaterial();
+        if (customMaterial) {
+            particlePool.instancedMesh.material = customMaterial;
+            console.log('3D Trail: Custom MatCap material applied');
+        }
+    } else {
+        // Restore original material
+        if (originalMaterial) {
+            particlePool.instancedMesh.material = originalMaterial;
+        }
+        if (customMaterial) {
+            if (customMaterial.matcap) {
+                customMaterial.matcap.dispose();
+            }
+            customMaterial.dispose();
+            customMaterial = null;
+        }
+        console.log('3D Trail: Original material restored');
+    }
+}
+
 // ========== ANIMATION LOOP ==========
 function animate() {
     requestAnimationFrame(animate);
@@ -1046,7 +1196,10 @@ window.trailTool = {
     loadGLBModel: loadGLBModel,
     loadDefaultModel: loadDefaultModel,
     clearModel: clearModel,
-    isModelLoaded: () => isModelLoaded
+    isModelLoaded: () => isModelLoaded,
+    updateMaterial: updateMaterial,
+    toggleMaterialMode: toggleMaterialMode,
+    getMatcapPreview: () => matcapGenerator?.getPreviewCanvas()
 };
 
 // ========== INITIALIZE ==========
