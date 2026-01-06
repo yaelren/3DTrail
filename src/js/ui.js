@@ -60,6 +60,7 @@ function initUIControls() {
     setupSlider('size-min', 'sizeMin', settings);
     setupSlider('size-max', 'sizeMax', settings);
     setupSlider('lifespan', 'lifespan', settings);
+    setupSlider('exit-duration', 'exitDuration', settings);
     setupToggle('size-by-speed', 'sizeBySpeed', settings);
 
     // Disappear mode dropdown

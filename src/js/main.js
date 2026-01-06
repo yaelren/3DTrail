@@ -35,6 +35,7 @@ const settings = {
     sizeMax: 1.5,
     sizeBySpeed: true,
     lifespan: 3.0,
+    exitDuration: 1.0,
     disappearMode: 'fade',
 
     // Movement
@@ -799,13 +800,22 @@ function updateParticles(delta) {
             }
         }
 
-        // Apply disappear mode (all use shrink)
+        // Apply disappear mode with exit duration control
         let currentScale = particle.initialScale;
+
+        // Calculate when the exit animation should start
+        const timeRemaining = particle.lifespan - particle.age;
+        const exitDuration = Math.min(settings.exitDuration, particle.lifespan); // Can't be longer than lifespan
 
         switch (settings.disappearMode) {
             case 'fade':
             case 'shrink':
-                currentScale = particle.initialScale * (1 - lifeRatio);
+                if (timeRemaining <= exitDuration) {
+                    // Calculate progress through exit animation (0 = just started, 1 = fully gone)
+                    const exitProgress = 1 - (timeRemaining / exitDuration);
+                    currentScale = particle.initialScale * (1 - exitProgress);
+                }
+                // else: keep full scale until exit animation starts
                 break;
             case 'snap':
                 // No gradual effect
