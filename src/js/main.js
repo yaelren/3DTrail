@@ -39,7 +39,8 @@ const settings = {
 
     // Movement
     floatEnabled: false,
-    floatSpeed: 0.5,
+    floatStyle: 'oscillate',  // 'oscillate', 'random', 'perlin'
+    floatAmplitude: 0.3,
     followEnabled: false,
     followStrength: 0.1,
 
@@ -55,6 +56,7 @@ const settings = {
     spinEnabled: false,
     spinSpeed: 1.0,
     tumbleEnabled: false,
+    tumbleSpeed: 1.0,
     bounceEnabled: false,
     bounceHeight: -3
 };
@@ -71,10 +73,14 @@ let loadedGeometry = null;
 let loadedMaterial = null;
 let isModelLoaded = false;
 
+// ========== DEFAULT MODEL ==========
+const DEFAULT_MODEL_PATH = 'assets/musa.glb';
+
 // ========== MOUSE STATE ==========
 let isMouseDown = false;
 let lastMousePos = { x: 0, y: 0 };
 let currentMousePos = { x: 0, y: 0 };
+let currentMouseWorldPos = null;  // World position for face mouse mode (initialized in init())
 let mouseSpeed = 0;
 let lastSpawnTime = 0;
 let lastMoveDirection = { x: 0, y: 0 };
@@ -163,13 +169,15 @@ class Particle {
         this.age = 0;
         this.lifespan = settings.lifespan;
         this.moveDirection = moveDirection ? moveDirection.clone() : new THREE.Vector2(1, 0);
+        this.spawnTime = clock ? clock.getElapsedTime() : 0;  // For float phase offset
+        this.phaseOffset = Math.random() * Math.PI * 2;  // Random phase for organic feel
 
         // Set initial angular velocity based on settings
         if (settings.tumbleEnabled) {
             this.angularVelocity.set(
-                (Math.random() - 0.5) * 4,
-                (Math.random() - 0.5) * 4,
-                (Math.random() - 0.5) * 4
+                (Math.random() - 0.5) * 4 * settings.tumbleSpeed,
+                (Math.random() - 0.5) * 4 * settings.tumbleSpeed,
+                (Math.random() - 0.5) * 4 * settings.tumbleSpeed
             );
         }
         if (settings.spinEnabled) {
@@ -196,10 +204,8 @@ class Particle {
                     THREE.MathUtils.degToRad(settings.fixedAngleZ)
                 );
                 break;
-            case 'direction':
-                // Calculate rotation to face movement direction
-                const angle = Math.atan2(this.moveDirection.y, this.moveDirection.x);
-                this.rotation.set(0, 0, angle);
+            case 'mouse':
+                // Will be updated each frame to face mouse position
                 break;
             case 'billboard':
             default:
@@ -212,6 +218,9 @@ class Particle {
 // ========== INITIALIZATION ==========
 function init() {
     console.log('3D Trail: Initializing...');
+
+    // Initialize mouse world position vector (must be done after THREE is loaded)
+    currentMouseWorldPos = new THREE.Vector3();
 
     // Make sure canvas has dimensions
     if (canvas.width === 0 || canvas.height === 0) {
@@ -290,7 +299,10 @@ function init() {
     // Start animation loop
     animate();
 
-    console.log('3D Trail: Initialization complete. Upload a GLB model to start creating trails!');
+    // Load default model
+    loadDefaultModel();
+
+    console.log('3D Trail: Initialization complete.');
 }
 
 // ========== EVENT LISTENERS ==========
@@ -437,6 +449,94 @@ function getWorldPosition() {
 }
 
 // ========== GLB LOADING ==========
+async function loadGLBFromURL(url, modelName = 'model') {
+    return new Promise((resolve, reject) => {
+        const LoaderClass = window.GLTFLoader;
+        if (!LoaderClass) {
+            reject(new Error('GLTFLoader not available. Make sure Three.js is loaded.'));
+            return;
+        }
+
+        const loader = new LoaderClass();
+        console.log('3D Trail: Loading GLB from URL:', url);
+
+        loader.load(
+            url,
+            (gltf) => {
+                console.log('3D Trail: GLB loaded successfully!', gltf);
+
+                let mesh = null;
+                gltf.scene.traverse((child) => {
+                    if (child.isMesh && !mesh) {
+                        mesh = child;
+                    }
+                });
+
+                if (!mesh) {
+                    reject(new Error('No mesh found in GLB file'));
+                    return;
+                }
+
+                loadedGeometry = mesh.geometry.clone();
+                loadedMaterial = mesh.material.clone ? mesh.material.clone() : mesh.material;
+
+                loadedGeometry.computeBoundingBox();
+                loadedGeometry.center();
+
+                const box = loadedGeometry.boundingBox;
+                const size = new THREE.Vector3();
+                box.getSize(size);
+                const maxDim = Math.max(size.x, size.y, size.z);
+                if (maxDim > 0) {
+                    const scale = 1 / maxDim;
+                    loadedGeometry.scale(scale, scale, scale);
+                }
+
+                if (particlePool.instancedMesh) {
+                    scene.remove(particlePool.instancedMesh);
+                }
+                particlePool = new ParticlePool(1000);
+                const instancedMesh = particlePool.init(loadedGeometry, loadedMaterial);
+                scene.add(instancedMesh);
+
+                isModelLoaded = true;
+                console.log('3D Trail: Model "' + modelName + '" loaded successfully!');
+
+                resolve({ geometry: loadedGeometry, material: loadedMaterial, name: modelName });
+            },
+            (progress) => {
+                if (progress.lengthComputable) {
+                    console.log('3D Trail: Loading progress:', Math.round(progress.loaded / progress.total * 100) + '%');
+                }
+            },
+            (error) => {
+                console.error('3D Trail: Error loading GLB:', error);
+                reject(error);
+            }
+        );
+    });
+}
+
+async function loadDefaultModel() {
+    try {
+        console.log('3D Trail: Loading default model...');
+        await loadGLBFromURL(DEFAULT_MODEL_PATH, 'musa.glb');
+
+        // Update UI to show default model is loaded
+        const modelInfo = document.getElementById('model-info');
+        const modelName = document.getElementById('model-name');
+        if (modelInfo && modelName) {
+            modelName.textContent = 'musa.glb (default)';
+            modelInfo.style.display = 'block';
+        }
+
+        console.log('3D Trail: Default model loaded successfully!');
+    } catch (error) {
+        console.warn('3D Trail: Could not load default model:', error.message);
+        console.log('3D Trail: Upload a GLB model to start creating trails.');
+    }
+}
+
 async function loadGLBModel(file) {
     return new Promise((resolve, reject) => {
         // Get GLTFLoader from global scope (set by module import)
@@ -575,6 +675,10 @@ function updateParticles(delta) {
     if (!particlePool || particlePool.particles.size === 0) return;
 
     const currentMouseWorld = getWorldPosition();
+    // Update global mouse world position for face mouse mode
+    if (currentMouseWorld) {
+        currentMouseWorldPos.copy(currentMouseWorld);
+    }
     const cameraPosition = camera.position.clone();
 
     const particlesToRemove = [];
@@ -590,9 +694,30 @@ function updateParticles(delta) {
 
         const lifeRatio = particle.age / particle.lifespan;
 
-        // Apply float
+        // Apply float (space-like wiggle)
         if (settings.floatEnabled) {
-            particle.velocity.y += settings.floatSpeed * delta;
+            const time = clock.getElapsedTime();
+            const phase = particle.spawnTime + particle.phaseOffset;
+
+            switch (settings.floatStyle) {
+                case 'oscillate':
+                    // Smooth sine-wave wiggle - objects stay roughly in place
+                    particle.position.x += Math.sin(time * 2 + phase) * settings.floatAmplitude * delta;
+                    particle.position.y += Math.cos(time * 2.5 + phase * 1.3) * settings.floatAmplitude * delta;
+                    break;
+                case 'random':
+                    // Small random velocity changes for wandering motion
+                    particle.velocity.x += (Math.random() - 0.5) * settings.floatAmplitude * delta * 2;
+                    particle.velocity.y += (Math.random() - 0.5) * settings.floatAmplitude * delta * 2;
+                    break;
+                case 'perlin':
+                    // Organic noise-based drift using sine combinations
+                    const noiseX = Math.sin(time * 0.7 + particle.index * 0.1) * Math.cos(time * 0.5 + phase);
+                    const noiseY = Math.cos(time * 0.6 + particle.index * 0.1) * Math.sin(time * 0.8 + phase);
+                    particle.position.x += noiseX * settings.floatAmplitude * delta;
+                    particle.position.y += noiseY * settings.floatAmplitude * delta;
+                    break;
+            }
         }
 
         // Apply gravity
@@ -633,6 +758,45 @@ function updateParticles(delta) {
             const rotY = Math.atan2(lookDir.x, lookDir.z);
             const rotX = Math.atan2(-lookDir.y, Math.sqrt(lookDir.x * lookDir.x + lookDir.z * lookDir.z));
             particle.rotation.set(rotX, rotY, 0);
+        }
+
+        // Face mouse - character-like head tracking (look at mouse)
+        if (settings.facingMode === 'mouse' && currentMouseWorldPos) {
+            const toMouse = currentMouseWorldPos.clone().sub(particle.position);
+            const distance = toMouse.length();
+
+            if (distance > 0.01) {
+                // Normalize direction for consistent rotation regardless of distance
+                toMouse.normalize();
+
+                // Calculate target rotations
+                // Y axis (yaw) - looking left/right (head turning) - MORE EXTREME
+                const targetRotY = Math.atan2(toMouse.x, 0.5) * 1.2;  // Increased for more extreme left/right
+
+                // X axis (pitch) - looking up/down (nodding)
+                const targetRotX = Math.atan2(-toMouse.y, 1) * 0.8;
+
+                // Z axis (roll) - subtle body swivel/lean
+                const targetRotZ = toMouse.x * 0.2;  // Slightly more lean
+
+                // Clamp target rotations
+                const maxAngleY = Math.PI / 2.5;  // ~72 degrees for left/right (more extreme)
+                const maxAngleX = Math.PI / 4;    // 45 degrees for up/down
+                const maxRoll = Math.PI / 10;     // 18 degrees for roll
+
+                const clampedRotX = Math.max(-maxAngleX, Math.min(maxAngleX, targetRotX));
+                const clampedRotY = Math.max(-maxAngleY, Math.min(maxAngleY, targetRotY));
+                const clampedRotZ = Math.max(-maxRoll, Math.min(maxRoll, targetRotZ));
+
+                // Add delay/lag based on particle age (older particles = more delay)
+                // This creates a trailing "look at" effect
+                const lagFactor = 0.1 + (lifeRatio * 0.15);  // 0.1 for new, 0.25 for old particles
+
+                // Lerp current rotation towards target (smooth follow with delay)
+                particle.rotation.x += (clampedRotX - particle.rotation.x) * lagFactor;
+                particle.rotation.y += (clampedRotY - particle.rotation.y) * lagFactor;
+                particle.rotation.z += (clampedRotZ - particle.rotation.z) * lagFactor;
+            }
         }
 
         // Apply disappear mode (all use shrink)
@@ -870,6 +1034,7 @@ window.renderHighResolution = function(targetCanvas, scale) {
 window.trailTool = {
     settings: settings,
     loadGLBModel: loadGLBModel,
+    loadDefaultModel: loadDefaultModel,
     clearModel: clearModel,
     isModelLoaded: () => isModelLoaded
 };

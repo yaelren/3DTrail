@@ -71,8 +71,17 @@ function initUIControls() {
     }
 
     // ========== MOVEMENT ==========
-    setupToggle('float-enabled', 'floatEnabled', settings, 'float-speed-group');
-    setupSlider('float-speed', 'floatSpeed', settings);
+    setupToggle('float-enabled', 'floatEnabled', settings, 'float-controls-group');
+    setupSlider('float-amplitude', 'floatAmplitude', settings);
+
+    // Float style dropdown
+    const floatStyle = document.getElementById('float-style');
+    if (floatStyle) {
+        floatStyle.addEventListener('change', (e) => {
+            settings.floatStyle = e.target.value;
+        });
+    }
+
     setupToggle('follow-enabled', 'followEnabled', settings, 'follow-strength-group');
     setupSlider('follow-strength', 'followStrength', settings);
 
@@ -98,7 +107,8 @@ function initUIControls() {
     setupSlider('gravity-strength', 'gravityStrength', settings);
     setupToggle('spin-enabled', 'spinEnabled', settings, 'spin-speed-group');
     setupSlider('spin-speed', 'spinSpeed', settings);
-    setupToggle('tumble-enabled', 'tumbleEnabled', settings);
+    setupToggle('tumble-enabled', 'tumbleEnabled', settings, 'tumble-speed-group');
+    setupSlider('tumble-speed', 'tumbleSpeed', settings);
     setupToggle('bounce-enabled', 'bounceEnabled', settings);
 
     // ========== BACKGROUND (handled in main.js but UI toggle here) ==========

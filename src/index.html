@@ -165,15 +165,27 @@
                             <button type="button" class="chatooly-toggle" id="float-enabled" role="switch" aria-pressed="false">
                                 <span class="chatooly-toggle-slider"></span>
                             </button>
-                            <label class="chatooly-toggle-label">Float</label>
+                            <label class="chatooly-toggle-label">Float (Space Wiggle)</label>
                         </div>
-                        <!-- Float Speed Slider (hidden by default) -->
-                        <div class="chatooly-slider-group" id="float-speed-group" style="display: none;">
-                            <div class="chatooly-slider-label">
-                                <span>Float Speed (- = down)</span>
-                                <span class="chatooly-slider-value" id="float-speed-value">0.5</span>
+                        <!-- Float Controls (hidden by default) -->
+                        <div id="float-controls-group" style="display: none;">
+                            <!-- Float Style Dropdown -->
+                            <div class="chatooly-input-group">
+                                <label class="chatooly-input-label" for="float-style">Float Style</label>
+                                <select class="chatooly-select" id="float-style">
+                                    <option value="oscillate">Oscillate</option>
+                                    <option value="random">Random Drift</option>
+                                    <option value="perlin">Perlin Noise</option>
+                                </select>
                             </div>
-                            <input type="range" class="chatooly-slider" id="float-speed" min="-2" max="2" step="0.1" value="0.5">
+                            <!-- Float Amplitude Slider -->
+                            <div class="chatooly-slider-group" id="float-amplitude-group">
+                                <div class="chatooly-slider-label">
+                                    <span>Float Amplitude</span>
+                                    <span class="chatooly-slider-value" id="float-amplitude-value">0.3</span>
+                                </div>
+                                <input type="range" class="chatooly-slider" id="float-amplitude" min="0.1" max="2" step="0.1" value="0.3">
+                            </div>
                         </div>
 
                         <!-- Follow Toggle -->
@@ -203,7 +215,7 @@
                             <label class="chatooly-input-label" for="facing-mode">Facing Mode</label>
                             <select class="chatooly-select" id="facing-mode">
                                 <option value="billboard">Billboard (Face Camera)</option>
-                                <option value="direction">Face Movement Direction</option>
+                                <option value="mouse">Face Mouse</option>
                                 <option value="random">Random Rotation</option>
                                 <option value="fixed">Fixed Angle</option>
                             </select>
@@ -278,6 +290,14 @@
                                 <span class="chatooly-toggle-slider"></span>
                             </button>
                             <label class="chatooly-toggle-label">Tumble (Random Rotation)</label>
+                        </div>
+                        <!-- Tumble Speed Slider (hidden by default) -->
+                        <div class="chatooly-slider-group" id="tumble-speed-group" style="display: none;">
+                            <div class="chatooly-slider-label">
+                                <span>Tumble Speed</span>
+                                <span class="chatooly-slider-value" id="tumble-speed-value">1.0</span>
+                            </div>
+                            <input type="range" class="chatooly-slider" id="tumble-speed" min="0.1" max="3" step="0.1" value="1">
                         </div>
 
                         <!-- Bounce Toggle -->
