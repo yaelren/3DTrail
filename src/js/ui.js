@@ -55,13 +55,50 @@ function initUIControls() {
         });
     }
 
-    // ========== TRAIL SETTINGS ==========
+    // ========== PARTICLE APPEARANCE ==========
     setupSlider('density', 'density', settings);
+    setupSlider('size', 'size', settings);
     setupSlider('size-min', 'sizeMin', settings);
     setupSlider('size-max', 'sizeMax', settings);
     setupSlider('lifespan', 'lifespan', settings);
     setupSlider('exit-duration', 'exitDuration', settings);
-    setupToggle('size-by-speed', 'sizeBySpeed', settings);
+
+    // Size control visibility logic
+    function updateSizeControlsVisibility() {
+        const singleGroup = document.getElementById('size-single-group');
+        const rangeGroup = document.getElementById('size-range-group');
+        const showRange = settings.randomSize || settings.sizeBySpeed;
+
+        if (singleGroup) singleGroup.style.display = showRange ? 'none' : 'block';
+        if (rangeGroup) rangeGroup.style.display = showRange ? 'block' : 'none';
+    }
+
+    // Random Size toggle
+    const randomSizeToggle = document.getElementById('random-size');
+    if (randomSizeToggle) {
+        randomSizeToggle.addEventListener('click', () => {
+            const isPressed = randomSizeToggle.getAttribute('aria-pressed') === 'true';
+            const newState = !isPressed;
+            randomSizeToggle.setAttribute('aria-pressed', newState);
+            settings.randomSize = newState;
+            updateSizeControlsVisibility();
+        });
+    }
+
+    // Size by Speed toggle
+    const sizeBySpeedToggle = document.getElementById('size-by-speed');
+    if (sizeBySpeedToggle) {
+        sizeBySpeedToggle.addEventListener('click', () => {
+            const isPressed = sizeBySpeedToggle.getAttribute('aria-pressed') === 'true';
+            const newState = !isPressed;
+            sizeBySpeedToggle.setAttribute('aria-pressed', newState);
+            settings.sizeBySpeed = newState;
+            updateSizeControlsVisibility();
+        });
+    }
+
+    // Initialize size controls visibility
+    updateSizeControlsVisibility();
 
     // Disappear mode dropdown
     const disappearMode = document.getElementById('disappear-mode');
@@ -112,6 +149,52 @@ function initUIControls() {
     setupSlider('tumble-speed', 'tumbleSpeed', settings);
     setupToggle('bounce-enabled', 'bounceEnabled', settings, 'bounce-amount-group');
     setupSlider('bounce-amount', 'bounceAmount', settings);
+
+    // ========== CAMERA CONTROLS ==========
+    // Camera position sliders
+    setupSlider('camera-x', 'cameraX', settings, (value) => {
+        if (window.trailTool?.setCameraPosition) {
+            window.trailTool.setCameraPosition(value, undefined, undefined);
+        }
+    });
+    setupSlider('camera-y', 'cameraY', settings, (value) => {
+        if (window.trailTool?.setCameraPosition) {
+            window.trailTool.setCameraPosition(undefined, value, undefined);
+        }
+    });
+    setupSlider('camera-z', 'cameraZ', settings, (value) => {
+        if (window.trailTool?.setCameraPosition) {
+            window.trailTool.setCameraPosition(undefined, undefined, value);
+        }
+    });
+    setupSlider('camera-fov', 'cameraFOV', settings, (value) => {
+        if (window.trailTool?.setCameraFOV) {
+            window.trailTool.setCameraFOV(value);
+        }
+    });
+
+    // Camera preset buttons
+    document.querySelectorAll('.camera-preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const view = btn.dataset.view;
+            if (window.trailTool?.setCameraPreset) {
+                window.trailTool.setCameraPreset(view);
+                // Update sliders to reflect new position
+                const newSettings = window.trailTool.settings;
+                updateSliderUI('camera-x', newSettings.cameraX);
+                updateSliderUI('camera-y', newSettings.cameraY);
+                updateSliderUI('camera-z', newSettings.cameraZ);
+            }
+        });
+    });
+
+    // Helper to update slider UI after preset
+    function updateSliderUI(sliderId, value) {
+        const slider = document.getElementById(sliderId);
+        const valueDisplay = document.getElementById(sliderId + '-value');
+        if (slider) slider.value = value;
+        if (valueDisplay) valueDisplay.textContent = value;
+    }
 
     // ========== BACKGROUND (handled in main.js but UI toggle here) ==========
     const transparentToggle = document.getElementById('transparent-bg');
@@ -281,6 +364,108 @@ function initUIControls() {
         });
     }
 
+    // ========== MULTI-GRADIENT CONTROLS ==========
+    const multiGradientToggle = document.getElementById('multi-gradient-enabled');
+    if (multiGradientToggle) {
+        multiGradientToggle.addEventListener('click', () => {
+            const isPressed = multiGradientToggle.getAttribute('aria-pressed') === 'true';
+            const newState = !isPressed;
+            multiGradientToggle.setAttribute('aria-pressed', newState);
+            settings.multiGradientEnabled = newState;
+
+            const controlsGroup = document.getElementById('multi-gradient-controls');
+            if (controlsGroup) {
+                controlsGroup.style.display = newState ? 'block' : 'none';
+            }
+
+            // Initialize gradient sets if empty
+            if (newState && settings.gradientSets.length === 0) {
+                // Copy current gradient as first set
+                settings.gradientSets.push({
+                    stops: JSON.parse(JSON.stringify(settings.gradientStops)),
+                    name: 'Gradient 1'
+                });
+                // Add a second default gradient
+                settings.gradientSets.push({
+                    stops: [
+                        { color: '#ffd93d', position: 0 },
+                        { color: '#ff6b6b', position: 50 },
+                        { color: '#c44569', position: 100 }
+                    ],
+                    name: 'Gradient 2'
+                });
+                rebuildGradientSetsUI();
+            }
+        });
+    }
+
+    // Gradient mode dropdown
+    const gradientMode = document.getElementById('gradient-mode');
+    if (gradientMode) {
+        gradientMode.addEventListener('change', (e) => {
+            settings.gradientMode = e.target.value;
+            const cycleSpeedGroup = document.getElementById('gradient-cycle-speed-group');
+            if (cycleSpeedGroup) {
+                cycleSpeedGroup.style.display = e.target.value === 'time' ? 'block' : 'none';
+            }
+        });
+    }
+
+    // Gradient cycle speed slider
+    setupSlider('gradient-cycle-speed', 'gradientCycleSpeed', settings);
+
+    // Add gradient set button
+    const addGradientSetBtn = document.getElementById('add-gradient-set');
+    if (addGradientSetBtn) {
+        addGradientSetBtn.addEventListener('click', () => {
+            if (settings.gradientSets.length >= 5) return; // Max 5 gradient sets
+            const newIndex = settings.gradientSets.length + 1;
+            settings.gradientSets.push({
+                stops: [
+                    { color: '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0'), position: 0 },
+                    { color: '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0'), position: 50 },
+                    { color: '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0'), position: 100 }
+                ],
+                name: 'Gradient ' + newIndex
+            });
+            rebuildGradientSetsUI();
+        });
+    }
+
+    // Helper function to rebuild gradient sets UI
+    function rebuildGradientSetsUI() {
+        const container = document.getElementById('gradient-sets-container');
+        if (!container) return;
+
+        const label = container.querySelector('.chatooly-input-label');
+        container.innerHTML = '';
+        if (label) container.appendChild(label);
+
+        settings.gradientSets.forEach((gradientSet, index) => {
+            const div = document.createElement('div');
+            div.className = 'gradient-set-item';
+            div.style.cssText = 'display: flex; gap: 8px; margin-bottom: 8px; align-items: center; padding: 8px; background: var(--chatooly-color-surface); border-radius: 4px;';
+
+            // Create color preview strip
+            const colorsPreview = gradientSet.stops.map(s => s.color).join(', ');
+            div.innerHTML = `
+                <div style="flex: 1; height: 24px; border-radius: 4px; background: linear-gradient(to right, ${colorsPreview});"></div>
+                <span style="font-size: 11px; min-width: 70px;">${gradientSet.name}</span>
+                ${index > 0 ? '<button class="chatooly-btn remove-gradient-set" data-index="' + index + '" style="padding: 2px 6px; min-width: auto;">×</button>' : ''}
+            `;
+            container.appendChild(div);
+        });
+
+        // Add remove handlers
+        container.querySelectorAll('.remove-gradient-set').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(e.target.dataset.index);
+                settings.gradientSets.splice(idx, 1);
+                rebuildGradientSetsUI();
+            });
+        });
+    }
+
     // Helper function to rebuild gradient stops UI dynamically
     function rebuildGradientStopsUI() {
         const container = document.getElementById('gradient-stops-container');
@@ -310,7 +495,7 @@ function initUIControls() {
 
 // ========== HELPER FUNCTIONS ==========
 
-function setupSlider(elementId, settingsKey, settings) {
+function setupSlider(elementId, settingsKey, settings, callback = null) {
     const slider = document.getElementById(elementId);
     const valueDisplay = document.getElementById(`${elementId}-value`);
 
@@ -321,6 +506,9 @@ function setupSlider(elementId, settingsKey, settings) {
         settings[settingsKey] = value;
         if (valueDisplay) {
             valueDisplay.textContent = value;
+        }
+        if (callback) {
+            callback(value);
         }
     });
 }

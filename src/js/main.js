@@ -31,9 +31,11 @@ setCanvasDimensions();
 const settings = {
     // Trail settings
     density: 20,
+    size: 1.0,           // Single size value (used when randomSize and sizeBySpeed are OFF)
     sizeMin: 0.5,
     sizeMax: 1.5,
-    sizeBySpeed: true,
+    randomSize: false,   // Random size within min/max range
+    sizeBySpeed: false,  // Size varies with mouse speed
     lifespan: 3.0,
     exitDuration: 1.0,
     disappearMode: 'fade',
@@ -62,6 +64,12 @@ const settings = {
     bounceHeight: -3,
     bounceAmount: 0.6,
 
+    // Camera
+    cameraX: 0,
+    cameraY: 0,
+    cameraZ: 10,
+    cameraFOV: 65,
+
     // Material settings (MatCap style)
     materialEnabled: false,
     gradientStops: [
@@ -75,7 +83,13 @@ const settings = {
     rimEnabled: true,
     rimColor: '#ffffff',
     rimIntensity: 0.5,
-    shaderMode: 'reflective'  // 'reflective' or 'toon'
+    shaderMode: 'reflective',  // 'reflective' or 'toon'
+
+    // Multi-gradient settings
+    multiGradientEnabled: false,
+    gradientSets: [],  // Array of gradient definitions: [{ stops: [...], name: 'Gradient 1' }, ...]
+    gradientMode: 'random',  // 'random' | 'time' | 'speed'
+    gradientCycleSpeed: 1.0  // For time mode
 };
 
 // ========== THREE.JS SETUP ==========
@@ -676,13 +690,18 @@ function trySpawnParticle(currentTime) {
     const index = particlePool.acquire();
     if (index === null) return;
 
-    // Calculate scale based on mouse speed
-    let scale = settings.sizeMin;
-    if (settings.sizeBySpeed && mouseSpeed > 0) {
+    // Calculate scale based on size settings
+    let scale;
+    if (settings.randomSize) {
+        // Random size between min and max
+        scale = THREE.MathUtils.lerp(settings.sizeMin, settings.sizeMax, Math.random());
+    } else if (settings.sizeBySpeed && mouseSpeed > 0) {
+        // Size based on mouse speed
         const speedNorm = Math.min(mouseSpeed / 50, 1);
         scale = THREE.MathUtils.lerp(settings.sizeMin, settings.sizeMax, speedNorm);
     } else {
-        scale = (settings.sizeMin + settings.sizeMax) / 2;
+        // Use single fixed size value
+        scale = settings.size;
     }
 
     // Create particle
@@ -1204,6 +1223,48 @@ window.renderHighResolution = function(targetCanvas, scale) {
     console.log(`High-res export completed at ${scale}x resolution`);
 };
 
+// ========== CAMERA CONTROLS ==========
+function setCameraPosition(x, y, z) {
+    if (camera) {
+        if (x !== undefined) camera.position.x = x;
+        if (y !== undefined) camera.position.y = y;
+        if (z !== undefined) camera.position.z = z;
+        settings.cameraX = camera.position.x;
+        settings.cameraY = camera.position.y;
+        settings.cameraZ = camera.position.z;
+    }
+}
+
+function setCameraFOV(fov) {
+    if (camera) {
+        camera.fov = fov;
+        camera.updateProjectionMatrix();
+        settings.cameraFOV = fov;
+    }
+}
+
+function setCameraPreset(view) {
+    const distance = 10;
+    const presets = {
+        front:  { x: 0, y: 0, z: distance },
+        back:   { x: 0, y: 0, z: -distance },
+        top:    { x: 0, y: distance, z: 0.001 },
+        bottom: { x: 0, y: -distance, z: 0.001 },
+        left:   { x: -distance, y: 0, z: 0.001 },
+        right:  { x: distance, y: 0, z: 0.001 }
+    };
+
+    const preset = presets[view];
+    if (preset && camera) {
+        camera.position.set(preset.x, preset.y, preset.z);
+        camera.lookAt(0, 0, 0);
+        settings.cameraX = preset.x;
+        settings.cameraY = preset.y;
+        settings.cameraZ = preset.z;
+        console.log('3D Trail: Camera preset', view);
+    }
+}
+
 // ========== EXPOSE FUNCTIONS FOR UI ==========
 window.trailTool = {
     settings: settings,
@@ -1213,7 +1274,10 @@ window.trailTool = {
     isModelLoaded: () => isModelLoaded,
     updateMaterial: updateMaterial,
     toggleMaterialMode: toggleMaterialMode,
-    getMatcapPreview: () => matcapGenerator?.getPreviewCanvas()
+    getMatcapPreview: () => matcapGenerator?.getPreviewCanvas(),
+    setCameraPosition: setCameraPosition,
+    setCameraFOV: setCameraFOV,
+    setCameraPreset: setCameraPreset
 };
 
 // ========== INITIALIZE ==========
