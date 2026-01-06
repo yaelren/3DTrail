@@ -60,6 +60,7 @@ const settings = {
     tumbleSpeed: 1.0,
     bounceEnabled: false,
     bounceHeight: -3,
+    bounceAmount: 0.6,
 
     // Material settings (MatCap style)
     materialEnabled: false,
@@ -185,6 +186,7 @@ class Particle {
         this.velocity = new THREE.Vector3(0, 0, 0);
         this.rotation = new THREE.Euler(0, 0, 0);
         this.angularVelocity = new THREE.Vector3(0, 0, 0);
+        this.spinOffset = new THREE.Vector3(0, 0, 0);  // Accumulated spin/tumble offset
         this.scale = new THREE.Vector3(1, 1, 1);
         this.initialScale = 1;
         this.age = 0;
@@ -768,20 +770,32 @@ function updateParticles(delta) {
         // Apply bounce
         if (settings.bounceEnabled && particle.position.y <= settings.bounceHeight) {
             particle.position.y = settings.bounceHeight;
-            particle.velocity.y = Math.abs(particle.velocity.y) * 0.6;
+            particle.velocity.y = Math.abs(particle.velocity.y) * settings.bounceAmount;
         }
 
-        // Update rotation
-        particle.rotation.x += particle.angularVelocity.x * delta;
-        particle.rotation.y += particle.angularVelocity.y * delta;
-        particle.rotation.z += particle.angularVelocity.z * delta;
+        // Accumulate spin/tumble offset (always accumulates, applied after facing)
+        particle.spinOffset.x += particle.angularVelocity.x * delta;
+        particle.spinOffset.y += particle.angularVelocity.y * delta;
+        particle.spinOffset.z += particle.angularVelocity.z * delta;
+
+        // Update rotation based on facing mode (for modes that don't override)
+        if (settings.facingMode === 'none' || settings.facingMode === 'random' || settings.facingMode === 'fixed') {
+            particle.rotation.x += particle.angularVelocity.x * delta;
+            particle.rotation.y += particle.angularVelocity.y * delta;
+            particle.rotation.z += particle.angularVelocity.z * delta;
+        }
 
         // Billboard facing
         if (settings.facingMode === 'billboard') {
             const lookDir = cameraPosition.clone().sub(particle.position).normalize();
             const rotY = Math.atan2(lookDir.x, lookDir.z);
             const rotX = Math.atan2(-lookDir.y, Math.sqrt(lookDir.x * lookDir.x + lookDir.z * lookDir.z));
-            particle.rotation.set(rotX, rotY, 0);
+            // Apply base facing, then add spin offset
+            particle.rotation.set(
+                rotX + particle.spinOffset.x,
+                rotY + particle.spinOffset.y,
+                particle.spinOffset.z
+            );
         }
 
         // Face mouse - character-like head tracking (look at mouse)
@@ -793,24 +807,24 @@ function updateParticles(delta) {
                 // Normalize direction for consistent rotation regardless of distance
                 toMouse.normalize();
 
-                // Calculate target rotations
+                // Calculate target rotations (with spin offset baked in)
                 // Y axis (yaw) - looking left/right (head turning) - MORE EXTREME
-                const targetRotY = Math.atan2(toMouse.x, 0.5) * 1.2;  // Increased for more extreme left/right
+                const targetRotY = Math.atan2(toMouse.x, 0.5) * 1.2 + particle.spinOffset.y;
 
                 // X axis (pitch) - looking up/down (nodding)
-                const targetRotX = Math.atan2(-toMouse.y, 1) * 0.8;
+                const targetRotX = Math.atan2(-toMouse.y, 1) * 0.8 + particle.spinOffset.x;
 
                 // Z axis (roll) - subtle body swivel/lean
-                const targetRotZ = toMouse.x * 0.2;  // Slightly more lean
+                const targetRotZ = toMouse.x * 0.2 + particle.spinOffset.z;
 
-                // Clamp target rotations
+                // Clamp target rotations (but allow spin to exceed the limits)
                 const maxAngleY = Math.PI / 2.5;  // ~72 degrees for left/right (more extreme)
                 const maxAngleX = Math.PI / 4;    // 45 degrees for up/down
                 const maxRoll = Math.PI / 10;     // 18 degrees for roll
 
-                const clampedRotX = Math.max(-maxAngleX, Math.min(maxAngleX, targetRotX));
-                const clampedRotY = Math.max(-maxAngleY, Math.min(maxAngleY, targetRotY));
-                const clampedRotZ = Math.max(-maxRoll, Math.min(maxRoll, targetRotZ));
+                const clampedRotX = Math.max(-maxAngleX, Math.min(maxAngleX, targetRotX - particle.spinOffset.x)) + particle.spinOffset.x;
+                const clampedRotY = Math.max(-maxAngleY, Math.min(maxAngleY, targetRotY - particle.spinOffset.y)) + particle.spinOffset.y;
+                const clampedRotZ = Math.max(-maxRoll, Math.min(maxRoll, targetRotZ - particle.spinOffset.z)) + particle.spinOffset.z;
 
                 // Add delay/lag based on particle age (older particles = more delay)
                 // This creates a trailing "look at" effect

@@ -110,7 +110,8 @@ function initUIControls() {
     setupSlider('spin-speed', 'spinSpeed', settings);
     setupToggle('tumble-enabled', 'tumbleEnabled', settings, 'tumble-speed-group');
     setupSlider('tumble-speed', 'tumbleSpeed', settings);
-    setupToggle('bounce-enabled', 'bounceEnabled', settings);
+    setupToggle('bounce-enabled', 'bounceEnabled', settings, 'bounce-amount-group');
+    setupSlider('bounce-amount', 'bounceAmount', settings);
 
     // ========== BACKGROUND (handled in main.js but UI toggle here) ==========
     const transparentToggle = document.getElementById('transparent-bg');
