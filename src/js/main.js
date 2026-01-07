@@ -118,6 +118,13 @@ let matcapGenerator = null;
 let customMaterial = null;
 let originalMaterial = null;  // Store original for toggling back
 
+// ========== GRADIENT LERPING SYSTEM (for time-based transitions) ==========
+let gradientTextures = [];  // Pre-generated textures for all gradients
+let currentGradientA = 0;   // Index of gradient A in blend
+let currentGradientB = 1;   // Index of gradient B in blend
+let gradientMixRatio = 0;   // 0 = fully A, 1 = fully B
+let gradientTransitionTime = 0;  // Time tracking for smooth transitions
+
 // ========== MULTI-GRADIENT PARTICLE SYSTEM ==========
 // For random per-particle gradients, we use multiple InstancedMeshes (one per gradient)
 let gradientPools = [];  // Array of { pool: ParticlePool, material: Material, mesh: InstancedMesh }
@@ -1089,11 +1096,13 @@ function initMaterialSystem() {
 function createCustomMaterial() {
     if (!matcapGenerator) return null;
 
-    // Get current gradient from gradientSets
-    const currentGradient = settings.gradientSets[settings.activeGradientIndex] || settings.gradientSets[0];
-    const texture = matcapGenerator.generate(
-        currentGradient.stops,
-        currentGradient.type,
+    // Pre-generate all gradient textures for blending
+    regenerateGradientTextures();
+
+    // Start with first gradient texture
+    const texture = gradientTextures[0] || matcapGenerator.generate(
+        settings.gradientSets[0].stops,
+        settings.gradientSets[0].type,
         settings.lightPosition
     );
 
@@ -1103,13 +1112,18 @@ function createCustomMaterial() {
         flatShading: settings.shaderMode === 'toon'
     });
 
-    // Extend with rim light via onBeforeCompile (Three.js pattern)
+    // Extend with rim light AND matcap blending via onBeforeCompile
     material.onBeforeCompile = (shader) => {
+        // Existing uniforms
         shader.uniforms.rimColor = { value: new THREE.Color(settings.rimColor) };
         shader.uniforms.rimIntensity = { value: settings.rimEnabled ? settings.rimIntensity : 0 };
         shader.uniforms.lightColor = { value: new THREE.Color(settings.lightColor) };
         shader.uniforms.lightIntensity = { value: settings.lightIntensity };
         shader.uniforms.toonMode = { value: settings.shaderMode === 'toon' ? 1 : 0 };
+
+        // NEW: Matcap blending uniforms
+        shader.uniforms.matcap2 = { value: gradientTextures[1] || gradientTextures[0] };
+        shader.uniforms.mixRatio = { value: 0.0 };
 
         // Inject uniforms after #include <common>
         shader.fragmentShader = shader.fragmentShader.replace(
@@ -1119,7 +1133,18 @@ function createCustomMaterial() {
             uniform float rimIntensity;
             uniform vec3 lightColor;
             uniform float lightIntensity;
-            uniform int toonMode;`
+            uniform int toonMode;
+            uniform sampler2D matcap2;
+            uniform float mixRatio;`
+        );
+
+        // Replace matcap sampling to blend two textures
+        // The default line is: vec4 matcapColor = texture2D( matcap, uv );
+        shader.fragmentShader = shader.fragmentShader.replace(
+            'vec4 matcapColor = texture2D( matcap, uv );',
+            `vec4 matcapColor1 = texture2D( matcap, uv );
+            vec4 matcapColor2 = texture2D( matcap2, uv );
+            vec4 matcapColor = mix(matcapColor1, matcapColor2, mixRatio);`
         );
 
         // Add rim light + toon effect before opaque_fragment
@@ -1147,6 +1172,25 @@ function createCustomMaterial() {
     };
 
     return material;
+}
+
+// Pre-generate textures for all gradients (called when gradients change)
+function regenerateGradientTextures() {
+    // Dispose old textures
+    gradientTextures.forEach(tex => {
+        if (tex) tex.dispose();
+    });
+    gradientTextures = [];
+
+    // Generate new textures for each gradient
+    settings.gradientSets.forEach((gradient) => {
+        const texture = matcapGenerator.generate(
+            gradient.stops,
+            gradient.type,
+            settings.lightPosition
+        );
+        gradientTextures.push(texture);
+    });
 }
 
 function updateMaterial() {
@@ -1226,8 +1270,6 @@ function toggleMaterialMode(enabled) {
 }
 
 // ========== MULTI-GRADIENT MANAGEMENT ==========
-let currentGradientIndex = 0;
-let lastGradientSwitchTime = 0;
 
 // Create material for a specific gradient
 function createMaterialForGradient(gradientIndex) {
@@ -1356,27 +1398,60 @@ function updateMultiGradientPoolMaterials() {
     });
 }
 
-function updateMultiGradient() {
+function updateMultiGradient(delta) {
     // Only run multi-gradient logic when there are 2+ gradients
     if (settings.gradientSets.length < 2) return;
 
-    const time = clock.getElapsedTime();
-    let newIndex = currentGradientIndex;
-
     if (settings.multiGradientMode === 'time') {
-        // Time-based cycling
-        const cycleInterval = 1 / settings.gradientCycleSpeed;
-        if (time - lastGradientSwitchTime >= cycleInterval) {
-            newIndex = (currentGradientIndex + 1) % settings.gradientSets.length;
-            lastGradientSwitchTime = time;
-        }
+        // Smooth lerping between gradients
+        updateGradientLerp(delta);
     }
     // For 'random' mode, switching happens on spawn (see trySpawnParticle)
+}
 
-    if (newIndex !== currentGradientIndex) {
-        currentGradientIndex = newIndex;
-        applyGradientSet(currentGradientIndex);
+// Smooth gradient lerping for time mode
+function updateGradientLerp(delta) {
+    if (!customMaterial?.userData?.shader) return;
+
+    const shader = customMaterial.userData.shader;
+    const numGradients = settings.gradientSets.length;
+
+    // Calculate transition speed (full cycle through all gradients)
+    // gradientCycleSpeed of 1.0 = 1 second per gradient transition
+    const transitionSpeed = settings.gradientCycleSpeed;
+
+    // Advance the mix ratio
+    gradientMixRatio += delta * transitionSpeed;
+
+    // When we complete a transition (mixRatio >= 1), move to next gradient pair
+    if (gradientMixRatio >= 1.0) {
+        gradientMixRatio = 0.0;
+        currentGradientA = currentGradientB;
+        currentGradientB = (currentGradientB + 1) % numGradients;
+
+        // Update the primary matcap texture to the new "A" gradient
+        if (gradientTextures[currentGradientA]) {
+            customMaterial.matcap = gradientTextures[currentGradientA];
+            customMaterial.needsUpdate = true;
+        }
+        // Update matcap2 to the new "B" gradient
+        if (shader.uniforms.matcap2 && gradientTextures[currentGradientB]) {
+            shader.uniforms.matcap2.value = gradientTextures[currentGradientB];
+        }
     }
+
+    // Update the mix ratio uniform for smooth blending
+    if (shader.uniforms.mixRatio) {
+        // Use smoothstep for more pleasing easing
+        const smoothMix = smoothstep(0, 1, gradientMixRatio);
+        shader.uniforms.mixRatio.value = smoothMix;
+    }
+}
+
+// Smoothstep easing function
+function smoothstep(edge0, edge1, x) {
+    const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+    return t * t * (3 - 2 * t);
 }
 
 function applyGradientSet(index) {
@@ -1396,8 +1471,8 @@ function animate() {
 
     const delta = clock.getDelta();
 
-    // Update multi-gradient (for time and speed modes)
-    updateMultiGradient();
+    // Update multi-gradient (for time mode - smooth lerping)
+    updateMultiGradient(delta);
 
     // Try spawning particles
     trySpawnParticle(performance.now());
