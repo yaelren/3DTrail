@@ -71,8 +71,15 @@ class MatCapGenerator {
         ctx.arc(center, center, radius - 1, 0, Math.PI * 2);
         ctx.fill();
 
-        // Create Three.js texture
-        const texture = new THREE.CanvasTexture(this.canvas);
+        // Create a COPY of the canvas data for the texture
+        // This is critical when generating multiple textures - each needs its own data
+        const texCanvas = document.createElement('canvas');
+        texCanvas.width = size;
+        texCanvas.height = size;
+        texCanvas.getContext('2d').drawImage(this.canvas, 0, 0);
+
+        // Create Three.js texture from the copy
+        const texture = new THREE.CanvasTexture(texCanvas);
         texture.needsUpdate = true;
         return texture;
     }

@@ -72,24 +72,33 @@ const settings = {
 
     // Material settings (MatCap style)
     materialEnabled: false,
-    gradientStops: [
-        { color: '#ff6b6b', position: 0 },
-        { color: '#4ecdc4', position: 50 },
-        { color: '#45b7d1', position: 100 }
+    shaderMode: 'reflective',  // 'reflective' or 'toon' - shared across all gradients
+
+    // Gradient sets - always at least 1
+    gradientSets: [
+        {
+            name: 'Gradient 1',
+            stops: [
+                { color: '#ff6b6b', position: 0 },
+                { color: '#4ecdc4', position: 50 },
+                { color: '#45b7d1', position: 100 }
+            ],
+            type: 'radial'  // Each gradient has its own type
+        }
     ],
-    gradientType: 'radial',
+    activeGradientIndex: 0,  // Currently editing/selected gradient
+
+    // Multi-gradient settings (only used when gradientSets.length >= 2)
+    multiGradientMode: 'random',  // 'random' | 'time'
+    gradientCycleSpeed: 1.0,
+
+    // Lighting (shared)
+    lightColor: '#ffffff',
     lightPosition: 0.5,
     lightIntensity: 1.0,
     rimEnabled: true,
     rimColor: '#ffffff',
-    rimIntensity: 0.5,
-    shaderMode: 'reflective',  // 'reflective' or 'toon'
-
-    // Multi-gradient settings
-    multiGradientEnabled: false,
-    gradientSets: [],  // Array of gradient definitions: [{ stops: [...], name: 'Gradient 1' }, ...]
-    gradientMode: 'random',  // 'random' | 'time' | 'speed'
-    gradientCycleSpeed: 1.0  // For time mode
+    rimIntensity: 0.5
 };
 
 // ========== THREE.JS SETUP ==========
@@ -108,6 +117,11 @@ let isModelLoaded = false;
 let matcapGenerator = null;
 let customMaterial = null;
 let originalMaterial = null;  // Store original for toggling back
+
+// ========== MULTI-GRADIENT PARTICLE SYSTEM ==========
+// For random per-particle gradients, we use multiple InstancedMeshes (one per gradient)
+let gradientPools = [];  // Array of { pool: ParticlePool, material: Material, mesh: InstancedMesh }
+let useMultiGradientPools = false;
 
 // ========== DEFAULT MODEL ==========
 const DEFAULT_MODEL_PATH = 'assets/musa.glb';
@@ -687,9 +701,6 @@ function trySpawnParticle(currentTime) {
     const worldPos = getWorldPosition();
     if (!worldPos) return;
 
-    const index = particlePool.acquire();
-    if (index === null) return;
-
     // Calculate scale based on size settings
     let scale;
     if (settings.randomSize) {
@@ -704,21 +715,44 @@ function trySpawnParticle(currentTime) {
         scale = settings.size;
     }
 
-    // Create particle
+    // Create particle - choose pool based on gradient mode
     const moveDir = new THREE.Vector2(lastMoveDirection.x, lastMoveDirection.y);
-    const particle = new Particle(index, worldPos, moveDir);
-    particle.initialScale = scale;
-    particle.scale.set(scale, scale, scale);
-    particle.lifespan = settings.lifespan;
 
-    particlePool.particles.set(index, particle);
+    // Use multi-gradient pools for random per-particle gradient assignment
+    if (useMultiGradientPools && settings.gradientSets.length >= 2 && settings.multiGradientMode === 'random') {
+        // Randomly select a gradient pool
+        const poolIndex = Math.floor(Math.random() * gradientPools.length);
+        const { pool } = gradientPools[poolIndex];
+
+        const index = pool.acquire();
+        if (index === null) return;
+
+        const particle = new Particle(index, worldPos, moveDir);
+        particle.initialScale = scale;
+        particle.scale.set(scale, scale, scale);
+        particle.lifespan = settings.lifespan;
+        particle.poolIndex = poolIndex;  // Track which pool this particle belongs to
+
+        pool.particles.set(index, particle);
+    } else {
+        // Standard single-pool mode
+        const index = particlePool.acquire();
+        if (index === null) return;
+
+        const particle = new Particle(index, worldPos, moveDir);
+        particle.initialScale = scale;
+        particle.scale.set(scale, scale, scale);
+        particle.lifespan = settings.lifespan;
+        particle.poolIndex = -1;  // Main pool
+
+        particlePool.particles.set(index, particle);
+    }
+
     lastSpawnTime = currentTime;
 }
 
 // ========== PARTICLE UPDATE ==========
 function updateParticles(delta) {
-    if (!particlePool || particlePool.particles.size === 0) return;
-
     const currentMouseWorld = getWorldPosition();
     // Update global mouse world position for face mouse mode
     if (currentMouseWorld) {
@@ -726,15 +760,13 @@ function updateParticles(delta) {
     }
     const cameraPosition = camera.position.clone();
 
-    const particlesToRemove = [];
-
-    particlePool.particles.forEach((particle, index) => {
+    // Helper function to update a single particle
+    function updateSingleParticle(particle, index, pool) {
         particle.age += delta;
 
         // Check lifespan
         if (particle.age >= particle.lifespan) {
-            particlesToRemove.push(index);
-            return;
+            return true; // Mark for removal
         }
 
         const lifeRatio = particle.age / particle.lifespan;
@@ -746,17 +778,14 @@ function updateParticles(delta) {
 
             switch (settings.floatStyle) {
                 case 'oscillate':
-                    // Smooth sine-wave wiggle - objects stay roughly in place
                     particle.position.x += Math.sin(time * 2 + phase) * settings.floatAmplitude * delta;
                     particle.position.y += Math.cos(time * 2.5 + phase * 1.3) * settings.floatAmplitude * delta;
                     break;
                 case 'random':
-                    // Small random velocity changes for wandering motion
                     particle.velocity.x += (Math.random() - 0.5) * settings.floatAmplitude * delta * 2;
                     particle.velocity.y += (Math.random() - 0.5) * settings.floatAmplitude * delta * 2;
                     break;
                 case 'perlin':
-                    // Organic noise-based drift using sine combinations
                     const noiseX = Math.sin(time * 0.7 + particle.index * 0.1) * Math.cos(time * 0.5 + phase);
                     const noiseY = Math.cos(time * 0.6 + particle.index * 0.1) * Math.sin(time * 0.8 + phase);
                     particle.position.x += noiseX * settings.floatAmplitude * delta;
@@ -792,12 +821,12 @@ function updateParticles(delta) {
             particle.velocity.y = Math.abs(particle.velocity.y) * settings.bounceAmount;
         }
 
-        // Accumulate spin/tumble offset (always accumulates, applied after facing)
+        // Accumulate spin/tumble offset
         particle.spinOffset.x += particle.angularVelocity.x * delta;
         particle.spinOffset.y += particle.angularVelocity.y * delta;
         particle.spinOffset.z += particle.angularVelocity.z * delta;
 
-        // Update rotation based on facing mode (for modes that don't override)
+        // Update rotation based on facing mode
         if (settings.facingMode === 'none' || settings.facingMode === 'random' || settings.facingMode === 'fixed') {
             particle.rotation.x += particle.angularVelocity.x * delta;
             particle.rotation.y += particle.angularVelocity.y * delta;
@@ -809,7 +838,6 @@ function updateParticles(delta) {
             const lookDir = cameraPosition.clone().sub(particle.position).normalize();
             const rotY = Math.atan2(lookDir.x, lookDir.z);
             const rotX = Math.atan2(-lookDir.y, Math.sqrt(lookDir.x * lookDir.x + lookDir.z * lookDir.z));
-            // Apply base facing, then add spin offset
             particle.rotation.set(
                 rotX + particle.spinOffset.x,
                 rotY + particle.spinOffset.y,
@@ -817,39 +845,26 @@ function updateParticles(delta) {
             );
         }
 
-        // Face mouse - character-like head tracking (look at mouse)
+        // Face mouse
         if (settings.facingMode === 'mouse' && currentMouseWorldPos) {
             const toMouse = currentMouseWorldPos.clone().sub(particle.position);
             const distance = toMouse.length();
 
             if (distance > 0.01) {
-                // Normalize direction for consistent rotation regardless of distance
                 toMouse.normalize();
-
-                // Calculate target rotations (with spin offset baked in)
-                // Y axis (yaw) - looking left/right (head turning) - MORE EXTREME
                 const targetRotY = Math.atan2(toMouse.x, 0.5) * 1.2 + particle.spinOffset.y;
-
-                // X axis (pitch) - looking up/down (nodding)
                 const targetRotX = Math.atan2(-toMouse.y, 1) * 0.8 + particle.spinOffset.x;
-
-                // Z axis (roll) - subtle body swivel/lean
                 const targetRotZ = toMouse.x * 0.2 + particle.spinOffset.z;
 
-                // Clamp target rotations (but allow spin to exceed the limits)
-                const maxAngleY = Math.PI / 2.5;  // ~72 degrees for left/right (more extreme)
-                const maxAngleX = Math.PI / 4;    // 45 degrees for up/down
-                const maxRoll = Math.PI / 10;     // 18 degrees for roll
+                const maxAngleY = Math.PI / 2.5;
+                const maxAngleX = Math.PI / 4;
+                const maxRoll = Math.PI / 10;
 
                 const clampedRotX = Math.max(-maxAngleX, Math.min(maxAngleX, targetRotX - particle.spinOffset.x)) + particle.spinOffset.x;
                 const clampedRotY = Math.max(-maxAngleY, Math.min(maxAngleY, targetRotY - particle.spinOffset.y)) + particle.spinOffset.y;
                 const clampedRotZ = Math.max(-maxRoll, Math.min(maxRoll, targetRotZ - particle.spinOffset.z)) + particle.spinOffset.z;
 
-                // Add delay/lag based on particle age (older particles = more delay)
-                // This creates a trailing "look at" effect
-                const lagFactor = 0.1 + (lifeRatio * 0.15);  // 0.1 for new, 0.25 for old particles
-
-                // Lerp current rotation towards target (smooth follow with delay)
+                const lagFactor = 0.1 + (lifeRatio * 0.15);
                 particle.rotation.x += (clampedRotX - particle.rotation.x) * lagFactor;
                 particle.rotation.y += (clampedRotY - particle.rotation.y) * lagFactor;
                 particle.rotation.z += (clampedRotZ - particle.rotation.z) * lagFactor;
@@ -858,43 +873,60 @@ function updateParticles(delta) {
 
         // Apply disappear mode with exit duration control
         let currentScale = particle.initialScale;
-
-        // Calculate when the exit animation should start
         const timeRemaining = particle.lifespan - particle.age;
-        const exitDuration = Math.min(settings.exitDuration, particle.lifespan); // Can't be longer than lifespan
+        const exitDuration = Math.min(settings.exitDuration, particle.lifespan);
 
         switch (settings.disappearMode) {
             case 'fade':
             case 'shrink':
                 if (timeRemaining <= exitDuration) {
-                    // Calculate progress through exit animation (0 = just started, 1 = fully gone)
                     const exitProgress = 1 - (timeRemaining / exitDuration);
                     currentScale = particle.initialScale * (1 - exitProgress);
                 }
-                // else: keep full scale until exit animation starts
                 break;
             case 'snap':
-                // No gradual effect
                 break;
         }
 
         particle.scale.set(currentScale, currentScale, currentScale);
 
         // Update instance matrix
-        particlePool.updateInstance(
-            index,
-            particle.position,
-            particle.rotation,
-            particle.scale
-        );
-    });
+        pool.updateInstance(index, particle.position, particle.rotation, particle.scale);
 
-    // Remove dead particles
-    particlesToRemove.forEach(index => {
-        particlePool.release(index);
-    });
+        return false; // Don't remove
+    }
 
-    particlePool.finishUpdate();
+    // Update main particle pool
+    if (particlePool && particlePool.particles.size > 0) {
+        const particlesToRemove = [];
+
+        particlePool.particles.forEach((particle, index) => {
+            if (updateSingleParticle(particle, index, particlePool)) {
+                particlesToRemove.push(index);
+            }
+        });
+
+        particlesToRemove.forEach(index => particlePool.release(index));
+        particlePool.finishUpdate();
+    }
+
+    // Update multi-gradient pools
+    if (useMultiGradientPools) {
+        gradientPools.forEach(({ pool }) => {
+            if (pool.particles.size === 0) return;
+
+            const particlesToRemove = [];
+
+            pool.particles.forEach((particle, index) => {
+                if (updateSingleParticle(particle, index, pool)) {
+                    particlesToRemove.push(index);
+                }
+            });
+
+            particlesToRemove.forEach(index => pool.release(index));
+            pool.finishUpdate();
+        });
+    }
 }
 
 // ========== BACKGROUND SYSTEM ==========
@@ -1057,9 +1089,11 @@ function initMaterialSystem() {
 function createCustomMaterial() {
     if (!matcapGenerator) return null;
 
+    // Get current gradient from gradientSets
+    const currentGradient = settings.gradientSets[settings.activeGradientIndex] || settings.gradientSets[0];
     const texture = matcapGenerator.generate(
-        settings.gradientStops,
-        settings.gradientType,
+        currentGradient.stops,
+        currentGradient.type,
         settings.lightPosition
     );
 
@@ -1073,6 +1107,7 @@ function createCustomMaterial() {
     material.onBeforeCompile = (shader) => {
         shader.uniforms.rimColor = { value: new THREE.Color(settings.rimColor) };
         shader.uniforms.rimIntensity = { value: settings.rimEnabled ? settings.rimIntensity : 0 };
+        shader.uniforms.lightColor = { value: new THREE.Color(settings.lightColor) };
         shader.uniforms.lightIntensity = { value: settings.lightIntensity };
         shader.uniforms.toonMode = { value: settings.shaderMode === 'toon' ? 1 : 0 };
 
@@ -1082,6 +1117,7 @@ function createCustomMaterial() {
             `#include <common>
             uniform vec3 rimColor;
             uniform float rimIntensity;
+            uniform vec3 lightColor;
             uniform float lightIntensity;
             uniform int toonMode;`
         );
@@ -1089,8 +1125,8 @@ function createCustomMaterial() {
         // Add rim light + toon effect before opaque_fragment
         shader.fragmentShader = shader.fragmentShader.replace(
             '#include <opaque_fragment>',
-            `// Apply light intensity
-            outgoingLight *= lightIntensity;
+            `// Apply light color and intensity
+            outgoingLight *= lightColor * lightIntensity;
 
             // Toon posterization
             if (toonMode == 1) {
@@ -1116,10 +1152,13 @@ function createCustomMaterial() {
 function updateMaterial() {
     if (!settings.materialEnabled || !particlePool?.instancedMesh || !matcapGenerator) return;
 
+    // Get current gradient from gradientSets
+    const currentGradient = settings.gradientSets[settings.activeGradientIndex] || settings.gradientSets[0];
+
     // Regenerate matcap texture
     const texture = matcapGenerator.generate(
-        settings.gradientStops,
-        settings.gradientType,
+        currentGradient.stops,
+        currentGradient.type,
         settings.lightPosition
     );
 
@@ -1137,10 +1176,14 @@ function updateMaterial() {
             const uniforms = customMaterial.userData.shader.uniforms;
             uniforms.rimColor.value.set(settings.rimColor);
             uniforms.rimIntensity.value = settings.rimEnabled ? settings.rimIntensity : 0;
+            uniforms.lightColor.value.set(settings.lightColor);
             uniforms.lightIntensity.value = settings.lightIntensity;
             uniforms.toonMode.value = settings.shaderMode === 'toon' ? 1 : 0;
         }
     }
+
+    // Also update multi-gradient pool materials when lighting changes
+    updateMultiGradientPoolMaterials();
 }
 
 function toggleMaterialMode(enabled) {
@@ -1157,6 +1200,11 @@ function toggleMaterialMode(enabled) {
             particlePool.instancedMesh.material = customMaterial;
             console.log('3D Trail: Custom MatCap material applied');
         }
+
+        // Initialize multi-gradient pools if we have multiple gradients and random mode
+        if (settings.gradientSets.length >= 2 && settings.multiGradientMode === 'random') {
+            initMultiGradientPools();
+        }
     } else {
         // Restore original material
         if (originalMaterial) {
@@ -1169,8 +1217,177 @@ function toggleMaterialMode(enabled) {
             customMaterial.dispose();
             customMaterial = null;
         }
+
+        // Clean up multi-gradient pools
+        cleanupMultiGradientPools();
+
         console.log('3D Trail: Original material restored');
     }
+}
+
+// ========== MULTI-GRADIENT MANAGEMENT ==========
+let currentGradientIndex = 0;
+let lastGradientSwitchTime = 0;
+
+// Create material for a specific gradient
+function createMaterialForGradient(gradientIndex) {
+    if (!matcapGenerator) return null;
+
+    const gradient = settings.gradientSets[gradientIndex];
+    if (!gradient) return null;
+
+    const texture = matcapGenerator.generate(
+        gradient.stops,
+        gradient.type,
+        settings.lightPosition
+    );
+
+    const material = new THREE.MeshMatcapMaterial({
+        matcap: texture,
+        side: THREE.DoubleSide,
+        flatShading: settings.shaderMode === 'toon'
+    });
+
+    // Extend with rim light via onBeforeCompile
+    material.onBeforeCompile = (shader) => {
+        shader.uniforms.rimColor = { value: new THREE.Color(settings.rimColor) };
+        shader.uniforms.rimIntensity = { value: settings.rimEnabled ? settings.rimIntensity : 0 };
+        shader.uniforms.lightColor = { value: new THREE.Color(settings.lightColor) };
+        shader.uniforms.lightIntensity = { value: settings.lightIntensity };
+        shader.uniforms.toonMode = { value: settings.shaderMode === 'toon' ? 1 : 0 };
+
+        shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <common>',
+            `#include <common>
+            uniform vec3 rimColor;
+            uniform float rimIntensity;
+            uniform vec3 lightColor;
+            uniform float lightIntensity;
+            uniform int toonMode;`
+        );
+
+        shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <opaque_fragment>',
+            `outgoingLight *= lightColor * lightIntensity;
+            if (toonMode == 1) {
+                outgoingLight = floor(outgoingLight * 4.0) / 4.0;
+            }
+            vec3 rimViewDir = normalize(vViewPosition);
+            float rimFactor = 1.0 - max(0.0, dot(normalize(vNormal), -rimViewDir));
+            rimFactor = pow(rimFactor, 2.0);
+            outgoingLight += rimColor * rimFactor * rimIntensity;
+            #include <opaque_fragment>`
+        );
+
+        material.userData.shader = shader;
+    };
+
+    return material;
+}
+
+// Initialize multiple gradient pools for per-particle random assignment
+function initMultiGradientPools() {
+    if (!loadedGeometry || !settings.materialEnabled) return;
+
+    // Clean up existing pools
+    cleanupMultiGradientPools();
+
+    // Create a pool for each gradient
+    settings.gradientSets.forEach((gradient, index) => {
+        const material = createMaterialForGradient(index);
+        if (!material) return;
+
+        const pool = new ParticlePool(Math.ceil(1000 / settings.gradientSets.length));
+        const mesh = pool.init(loadedGeometry, material);
+        scene.add(mesh);
+
+        gradientPools.push({
+            pool: pool,
+            material: material,
+            mesh: mesh,
+            gradientIndex: index
+        });
+    });
+
+    useMultiGradientPools = gradientPools.length > 0;
+}
+
+// Clean up multi-gradient pools
+function cleanupMultiGradientPools() {
+    gradientPools.forEach(({ pool, material, mesh }) => {
+        pool.clear();
+        scene.remove(mesh);
+        if (material.matcap) material.matcap.dispose();
+        material.dispose();
+        // Note: Don't dispose mesh.geometry - it's the shared loadedGeometry
+    });
+    gradientPools = [];
+    useMultiGradientPools = false;
+}
+
+// Update multi-gradient pool materials (when lighting/shader settings change)
+function updateMultiGradientPoolMaterials() {
+    if (!useMultiGradientPools) return;
+
+    gradientPools.forEach(({ material, gradientIndex }) => {
+        const gradient = settings.gradientSets[gradientIndex];
+        if (!gradient || !matcapGenerator) return;
+
+        // Regenerate texture
+        const texture = matcapGenerator.generate(
+            gradient.stops,
+            gradient.type,
+            settings.lightPosition
+        );
+
+        if (material.matcap) material.matcap.dispose();
+        material.matcap = texture;
+        material.flatShading = settings.shaderMode === 'toon';
+        material.needsUpdate = true;
+
+        if (material.userData.shader) {
+            const uniforms = material.userData.shader.uniforms;
+            uniforms.rimColor.value.set(settings.rimColor);
+            uniforms.rimIntensity.value = settings.rimEnabled ? settings.rimIntensity : 0;
+            uniforms.lightColor.value.set(settings.lightColor);
+            uniforms.lightIntensity.value = settings.lightIntensity;
+            uniforms.toonMode.value = settings.shaderMode === 'toon' ? 1 : 0;
+        }
+    });
+}
+
+function updateMultiGradient() {
+    // Only run multi-gradient logic when there are 2+ gradients
+    if (settings.gradientSets.length < 2) return;
+
+    const time = clock.getElapsedTime();
+    let newIndex = currentGradientIndex;
+
+    if (settings.multiGradientMode === 'time') {
+        // Time-based cycling
+        const cycleInterval = 1 / settings.gradientCycleSpeed;
+        if (time - lastGradientSwitchTime >= cycleInterval) {
+            newIndex = (currentGradientIndex + 1) % settings.gradientSets.length;
+            lastGradientSwitchTime = time;
+        }
+    }
+    // For 'random' mode, switching happens on spawn (see trySpawnParticle)
+
+    if (newIndex !== currentGradientIndex) {
+        currentGradientIndex = newIndex;
+        applyGradientSet(currentGradientIndex);
+    }
+}
+
+function applyGradientSet(index) {
+    if (index >= settings.gradientSets.length) return;
+
+    const gradientSet = settings.gradientSets[index];
+    if (!gradientSet || !gradientSet.stops) return;
+
+    // Update active gradient index and regenerate material
+    settings.activeGradientIndex = index;
+    updateMaterial();
 }
 
 // ========== ANIMATION LOOP ==========
@@ -1178,6 +1395,9 @@ function animate() {
     requestAnimationFrame(animate);
 
     const delta = clock.getDelta();
+
+    // Update multi-gradient (for time and speed modes)
+    updateMultiGradient();
 
     // Try spawning particles
     trySpawnParticle(performance.now());
@@ -1275,9 +1495,18 @@ window.trailTool = {
     updateMaterial: updateMaterial,
     toggleMaterialMode: toggleMaterialMode,
     getMatcapPreview: () => matcapGenerator?.getPreviewCanvas(),
+    generateMatcapPreview: (stops, type) => {
+        if (!matcapGenerator) return null;
+        matcapGenerator.generate(stops, type, settings.lightPosition);
+        return matcapGenerator.getPreviewCanvas();
+    },
     setCameraPosition: setCameraPosition,
     setCameraFOV: setCameraFOV,
-    setCameraPreset: setCameraPreset
+    setCameraPreset: setCameraPreset,
+    // Multi-gradient pool functions
+    initMultiGradientPools: initMultiGradientPools,
+    updateMultiGradientPoolMaterials: updateMultiGradientPoolMaterials,
+    cleanupMultiGradientPools: cleanupMultiGradientPools
 };
 
 // ========== INITIALIZE ==========
