@@ -141,14 +141,13 @@ function initUIControls() {
     setupSlider('angle-z', 'fixedAngleZ', settings);
 
     // ========== PHYSICS ==========
-    setupToggle('gravity-enabled', 'gravityEnabled', settings, 'gravity-strength-group');
+    setupToggle('gravity-enabled', 'gravityEnabled', settings, 'gravity-controls-group');
     setupSlider('gravity-strength', 'gravityStrength', settings);
+    setupSlider('bounce-amount', 'bounceAmount', settings);
     setupToggle('spin-enabled', 'spinEnabled', settings, 'spin-speed-group');
     setupSlider('spin-speed', 'spinSpeed', settings);
     setupToggle('tumble-enabled', 'tumbleEnabled', settings, 'tumble-speed-group');
     setupSlider('tumble-speed', 'tumbleSpeed', settings);
-    setupToggle('bounce-enabled', 'bounceEnabled', settings, 'bounce-amount-group');
-    setupSlider('bounce-amount', 'bounceAmount', settings);
 
     // ========== CAMERA CONTROLS ==========
     // Camera position sliders

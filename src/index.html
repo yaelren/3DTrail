@@ -175,11 +175,10 @@
 
                         <!-- Disappear Mode Dropdown -->
                         <div class="chatooly-input-group">
-                            <label class="chatooly-input-label" for="disappear-mode">Disappear Mode</label>
+                            <label class="chatooly-input-label" for="disappear-mode">Exit Animation</label>
                             <select class="chatooly-select" id="disappear-mode">
-                                <option value="fade">Fade Out (Shrink)</option>
-                                <option value="shrink">Shrink</option>
-                                <option value="snap">Snap Out</option>
+                                <option value="fade">Shrink & Fade</option>
+                                <option value="snap">Cut</option>
                             </select>
                         </div>
 
@@ -285,29 +284,23 @@
                                 </button>
                                 <label class="chatooly-toggle-label">Gravity</label>
                             </div>
-                            <!-- Gravity Strength Slider (hidden by default) -->
-                            <div class="chatooly-slider-group" id="gravity-strength-group" style="display: none;">
-                                <div class="chatooly-slider-label">
-                                    <span>Gravity Strength</span>
-                                    <span class="chatooly-slider-value" id="gravity-strength-value">9.8</span>
+                            <!-- Gravity Controls (hidden by default, shown when gravity is on) -->
+                            <div id="gravity-controls-group" style="display: none;">
+                                <div class="chatooly-slider-group">
+                                    <div class="chatooly-slider-label">
+                                        <span>Gravity Strength</span>
+                                        <span class="chatooly-slider-value" id="gravity-strength-value">9.8</span>
+                                    </div>
+                                    <input type="range" class="chatooly-slider" id="gravity-strength" min="0" max="30" step="0.5" value="9.8">
                                 </div>
-                                <input type="range" class="chatooly-slider" id="gravity-strength" min="0" max="30" step="0.5" value="9.8">
-                            </div>
 
-                            <!-- Bounce Toggle -->
-                            <div class="chatooly-toggle-group">
-                                <button type="button" class="chatooly-toggle" id="bounce-enabled" role="switch" aria-pressed="false">
-                                    <span class="chatooly-toggle-slider"></span>
-                                </button>
-                                <label class="chatooly-toggle-label">Bounce</label>
-                            </div>
-                            <!-- Bounce Amount Slider (hidden by default) -->
-                            <div class="chatooly-slider-group" id="bounce-amount-group" style="display: none;">
-                                <div class="chatooly-slider-label">
-                                    <span>Bounce Amount</span>
-                                    <span class="chatooly-slider-value" id="bounce-amount-value">0.6</span>
+                                <div class="chatooly-slider-group">
+                                    <div class="chatooly-slider-label">
+                                        <span>Bounciness</span>
+                                        <span class="chatooly-slider-value" id="bounce-amount-value">0.6</span>
+                                    </div>
+                                    <input type="range" class="chatooly-slider" id="bounce-amount" min="0" max="1" step="0.05" value="0.6">
                                 </div>
-                                <input type="range" class="chatooly-slider" id="bounce-amount" min="0" max="1" step="0.05" value="0.6">
                             </div>
                         </div>
 
@@ -562,8 +555,15 @@
 
                 <!-- ========== END EDIT SECTION ========== -->
             </div>
+
+            <!-- Footer with Clear Canvas Button -->
+            <div class="chatooly-controls-footer" style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
+                <button class="chatooly-btn" id="clear-canvas-btn" style="width: 100%;">
+                    Clear Canvas
+                </button>
+            </div>
         </div>
-        
+
         <!-- Right Panel: Preview/Canvas Area -->
         <div class="chatooly-preview-panel">
             <!-- ========== DO NOT EDIT: Required Export Container ========== -->

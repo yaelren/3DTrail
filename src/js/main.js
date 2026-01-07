@@ -60,7 +60,7 @@ const settings = {
     spinSpeed: 1.0,
     tumbleEnabled: false,
     tumbleSpeed: 1.0,
-    bounceEnabled: false,
+    bounceEnabled: true,  // Bounce is always on when gravity is enabled
     bounceHeight: -3,
     bounceAmount: 0.6,
 
@@ -1559,6 +1559,38 @@ function setCameraPreset(view) {
         console.log('3D Trail: Camera preset', view);
     }
 }
+
+// ========== CLEAR CANVAS ==========
+function clearCanvas() {
+    // Clear main particle pool
+    if (particlePool) {
+        particlePool.clear();
+        particlePool.finishUpdate();
+    }
+
+    // Clear multi-gradient pools
+    if (useMultiGradientPools) {
+        gradientPools.forEach(({ pool }) => {
+            pool.clear();
+            pool.finishUpdate();
+        });
+    }
+
+    // Render the empty scene
+    if (renderer && scene && camera) {
+        renderer.render(scene, camera);
+    }
+
+    console.log('3D Trail: Canvas cleared');
+}
+
+// Setup clear canvas button
+document.addEventListener('DOMContentLoaded', () => {
+    const clearCanvasBtn = document.getElementById('clear-canvas-btn');
+    if (clearCanvasBtn) {
+        clearCanvasBtn.addEventListener('click', clearCanvas);
+    }
+});
 
 // ========== EXPOSE FUNCTIONS FOR UI ==========
 window.trailTool = {
