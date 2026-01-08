@@ -159,7 +159,7 @@ let ageFadingAgeBuffer = null; // Float32Array for age ratios
 let useAgeFading = false;
 
 // ========== DEFAULT MODEL ==========
-const DEFAULT_MODEL_PATH = 'assets/musa.glb';
+// No default model - user must upload their own GLB
 
 // ========== MOUSE STATE ==========
 let isMouseDown = false;
@@ -409,10 +409,7 @@ function init() {
     // Start animation loop
     animate();
 
-    // Load default model
-    loadDefaultModel();
-
-    console.log('3D Trail: Initialization complete.');
+    console.log('3D Trail: Initialization complete. Upload a GLB model to start.');
 }
 
 // ========== EVENT LISTENERS ==========
@@ -661,7 +658,8 @@ async function loadGLBFromURL(url, modelName = 'model') {
                 isModelLoaded = true;
                 console.log('3D Trail: Model "' + modelName + '" loaded successfully!');
 
-                // Note: applyCurrentMaterial is called by loadDefaultModel after this resolves
+                // Apply material after model loads
+                applyCurrentMaterial();
 
                 resolve({ geometry: loadedGeometry, material: loadedMaterial, name: modelName });
             },
@@ -678,28 +676,6 @@ async function loadGLBFromURL(url, modelName = 'model') {
     });
 }
 
-async function loadDefaultModel() {
-    try {
-        console.log('3D Trail: Loading default model...');
-        await loadGLBFromURL(DEFAULT_MODEL_PATH, 'musa.glb');
-
-        // Update UI to show default model is loaded
-        const modelInfo = document.getElementById('model-info');
-        const modelName = document.getElementById('model-name');
-        if (modelInfo && modelName) {
-            modelName.textContent = 'musa.glb (default)';
-            modelInfo.style.display = 'block';
-        }
-
-        // Apply default material (solid color) after model loads
-        applyCurrentMaterial();
-
-        console.log('3D Trail: Default model loaded successfully!');
-    } catch (error) {
-        console.warn('3D Trail: Could not load default model:', error.message);
-        console.log('3D Trail: Upload a GLB model to start creating trails.');
-    }
-}
 
 async function loadGLBModel(file) {
     return new Promise((resolve, reject) => {
@@ -2264,7 +2240,6 @@ document.addEventListener('DOMContentLoaded', () => {
 window.trailTool = {
     settings: settings,
     loadGLBModel: loadGLBModel,
-    loadDefaultModel: loadDefaultModel,
     clearModel: clearModel,
     isModelLoaded: () => isModelLoaded,
     updateMaterial: updateMaterial,
