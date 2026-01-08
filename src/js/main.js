@@ -83,10 +83,10 @@ const settings = {
     cursorImage: null,      // Base64 data URL of uploaded image
     cursorSize: 32,
 
-    // Material settings (MatCap style)
-    materialEnabled: false,
-    materialType: 'gradient',  // 'solid', 'gradient', or 'matcapUpload'
-    solidColor: '#4a90d9',     // Color for solid material type
+    // Material settings (MatCap style) - always enabled, solid by default
+    materialEnabled: true,
+    materialType: 'solid',  // 'solid', 'gradient', or 'matcapUpload'
+    solidColor: '#4a90d9',  // Color for solid material type
     shaderMode: 'reflective',  // 'reflective' or 'toon' - shared across all gradients
 
     // Gradient sets - always at least 1
@@ -104,9 +104,9 @@ const settings = {
     activeGradientIndex: 0,  // Currently editing/selected gradient
 
     // Multi-gradient settings (only used when gradientSets.length >= 2)
-    multiGradientMode: 'random',  // 'random' | 'time' | 'lerp'
+    multiGradientMode: 'random',  // 'random' | 'lerp' (fade between) | 'time' | 'age'
     gradientCycleSpeed: 1.0,
-    lerpSteps: 4,  // Intermediate steps between gradients for lerp mode
+    lerpSteps: 8,  // Steps between gradients for fade mode
 
     // Lighting (shared)
     lightColor: '#ffffff',
@@ -661,6 +661,8 @@ async function loadGLBFromURL(url, modelName = 'model') {
                 isModelLoaded = true;
                 console.log('3D Trail: Model "' + modelName + '" loaded successfully!');
 
+                // Note: applyCurrentMaterial is called by loadDefaultModel after this resolves
+
                 resolve({ geometry: loadedGeometry, material: loadedMaterial, name: modelName });
             },
             (progress) => {
@@ -688,6 +690,9 @@ async function loadDefaultModel() {
             modelName.textContent = 'musa.glb (default)';
             modelInfo.style.display = 'block';
         }
+
+        // Apply default material (solid color) after model loads
+        applyCurrentMaterial();
 
         console.log('3D Trail: Default model loaded successfully!');
     } catch (error) {
@@ -766,6 +771,9 @@ async function loadGLBModel(file) {
 
                 isModelLoaded = true;
                 console.log('3D Trail: Model loaded successfully, ready to create trails!');
+
+                // Apply current material settings to new model
+                applyCurrentMaterial();
 
                 resolve({ geometry: loadedGeometry, material: loadedMaterial });
             },
@@ -1212,11 +1220,49 @@ function clearUploadedMatcap() {
         uploadedMatcapTexture = null;
     }
 
-    // If we're in matcapUpload mode, switch back to gradient
-    if (settings.materialType === 'matcapUpload' && settings.materialEnabled) {
-        settings.materialType = 'gradient';
-        toggleMaterialMode(false);
-        toggleMaterialMode(true);
+    // If we're in matcapUpload mode, switch back to solid
+    if (settings.materialType === 'matcapUpload') {
+        settings.materialType = 'solid';
+        applyCurrentMaterial();
+    }
+}
+
+// Apply the current material based on materialType setting
+function applyCurrentMaterial() {
+    if (!particlePool?.instancedMesh) return;
+
+    // Store original material for reference (first time only)
+    if (!originalMaterial) {
+        originalMaterial = particlePool.instancedMesh.material;
+    }
+
+    // Clean up existing multi-gradient systems
+    cleanupMultiGradientPools();
+    cleanupLerpPools();
+    cleanupAgeFading();
+
+    // Apply material based on type
+    if (settings.materialType === 'solid') {
+        applySolidColor();
+    } else if (settings.materialType === 'matcapUpload' && uploadedMatcapTexture) {
+        applyUploadedMatcap();
+    } else {
+        // Gradient mode
+        customMaterial = createCustomMaterial();
+        if (customMaterial) {
+            particlePool.instancedMesh.material = customMaterial;
+        }
+
+        // Initialize multi-gradient pools based on mode
+        if (settings.gradientSets.length >= 2) {
+            if (settings.multiGradientMode === 'random') {
+                initMultiGradientPools();
+            } else if (settings.multiGradientMode === 'lerp') {
+                initLerpPools();
+            } else if (settings.multiGradientMode === 'age') {
+                initAgeFading();
+            }
+        }
     }
 }
 
@@ -2243,8 +2289,9 @@ window.trailTool = {
     applyUploadedMatcap: applyUploadedMatcap,
     clearUploadedMatcap: clearUploadedMatcap,
     hasUploadedMatcap: () => uploadedMatcapTexture !== null,
-    // Solid color function
+    // Material functions
     applySolidColor: applySolidColor,
+    applyCurrentMaterial: applyCurrentMaterial,
     // Lerp mode functions
     initLerpPools: initLerpPools,
     cleanupLerpPools: cleanupLerpPools,

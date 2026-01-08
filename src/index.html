@@ -100,13 +100,13 @@
                 <div class="chatooly-section-card" data-section="appearance">
                     <h3 class="chatooly-section-header">Particle Appearance</h3>
                     <div class="chatooly-section-content">
-                        <!-- Density Slider -->
+                        <!-- Spacing Slider (distance-based spawning) -->
                         <div class="chatooly-slider-group">
                             <div class="chatooly-slider-label">
-                                <span>Density (per second)</span>
-                                <span class="chatooly-slider-value" id="density-value">20</span>
+                                <span>Spacing (pixels)</span>
+                                <span class="chatooly-slider-value" id="spacing-value">20</span>
                             </div>
-                            <input type="range" class="chatooly-slider" id="density" min="1" max="50" value="20">
+                            <input type="range" class="chatooly-slider" id="spacing" min="5" max="100" step="1" value="20">
                         </div>
 
                         <!-- Single Size Slider (shown by default) -->
@@ -218,11 +218,158 @@
                                     <input type="range" class="chatooly-slider" id="angle-z" min="0" max="360" value="0">
                                 </div>
                             </div>
+
                         </div>
                     </div>
                 </div>
 
-                <!-- Section 3: Movement & Physics (merged) -->
+                <!-- Section: Particle Material (always enabled) -->
+                <div class="chatooly-section-card" data-section="material">
+                    <h3 class="chatooly-section-header">Particle Material</h3>
+                    <div class="chatooly-section-content">
+                        <!-- Material Controls (always visible) -->
+                        <div id="material-controls-group">
+
+                            <!-- Material Type Selector -->
+                            <div class="chatooly-input-group">
+                                <label class="chatooly-input-label" for="material-type">Material Type</label>
+                                <select class="chatooly-select" id="material-type">
+                                    <option value="solid">Solid Color</option>
+                                    <option value="gradient">Gradient</option>
+                                    <option value="matcapUpload">Custom MatCap</option>
+                                </select>
+                            </div>
+
+                            <!-- Solid Color Picker (shown by default since solid is default type) -->
+                            <div id="solid-color-group" style="display: block;">
+                                <div class="chatooly-color-group" style="margin-bottom: 8px;">
+                                    <label class="chatooly-color-label" for="solid-color">Color</label>
+                                    <input type="color" class="chatooly-color-input" id="solid-color" value="#4a90d9">
+                                </div>
+                            </div>
+
+                            <!-- Custom MatCap Upload Section (hidden by default) -->
+                            <div id="matcap-upload-group" style="display: none;">
+                                <div class="chatooly-upload-area" style="height: 80px; margin-bottom: 8px;">
+                                    <div class="chatooly-upload-icon">
+                                        <svg viewBox="0 0 11 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M7.94444 0L11 3V11.4048C10.9998 11.5627 10.9358 11.7141 10.822 11.8257C10.7083 11.9373 10.554 12 10.3932 12H0.606833C0.446342 11.9989 0.292733 11.9359 0.179189 11.8245C0.0656443 11.7131 0.00128006 11.5624 0 11.4048V0.5952C0 0.2664 0.271944 0 0.606833 0H7.94444ZM6.11111 6H7.94444L5.5 3.6L3.05556 6H4.88889V8.4H6.11111V6Z" fill="var(--fill-0, #454545)"/>
+                                        </svg>
+                                    </div>
+                                    <div class="chatooly-upload-text">Upload MatCap Image</div>
+                                    <input type="file" class="chatooly-upload-input" id="matcap-upload" accept="image/*">
+                                </div>
+                                <!-- MatCap Preview -->
+                                <div id="matcap-preview-container" style="display: none; margin-bottom: 12px; text-align: center;">
+                                    <canvas id="matcap-preview" width="80" height="80" style="border-radius: 50%; border: 1px solid var(--chatooly-color-border);"></canvas>
+                                    <button class="chatooly-btn" id="clear-matcap" style="display: block; margin: 8px auto 0; padding: 4px 12px;">Clear</button>
+                                </div>
+                            </div>
+
+                            <!-- Gradient Controls Section (hidden by default, shown when gradient selected) -->
+                            <div id="gradient-controls-section" style="display: none;">
+                                <!-- Shader Mode (at top, shared across all gradients) -->
+                                <div class="chatooly-input-group">
+                                    <label class="chatooly-input-label" for="shader-mode">Shader Mode</label>
+                                    <select class="chatooly-select" id="shader-mode">
+                                        <option value="reflective">Reflective</option>
+                                        <option value="toon">Toon</option>
+                                    </select>
+                                </div>
+
+                                <!-- Gradients List Container -->
+                                <div id="gradients-list-container" style="margin-top: 12px;">
+                                    <!-- Dynamically populated gradient list items -->
+                                </div>
+
+                                <!-- Add Gradient Button -->
+                                <button class="chatooly-btn" id="add-gradient-btn" style="width: 100%; margin-top: 8px;">+ Add Gradient</button>
+
+                                <!-- Multi-Gradient Mode Section (hidden when only 1 gradient) -->
+                                <div id="multi-gradient-section" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--chatooly-color-border);">
+                                    <div class="chatooly-input-group">
+                                        <label class="chatooly-input-label" for="multi-gradient-mode">Multi-Gradient Mode</label>
+                                        <select class="chatooly-select" id="multi-gradient-mode">
+                                            <option value="random">Random per spawn</option>
+                                            <option value="lerp">Fade between gradients</option>
+                                            <option value="time">Change over time</option>
+                                            <option value="age">Fades with age</option>
+                                        </select>
+                                    </div>
+                                    <div class="chatooly-slider-group" id="cycle-speed-group" style="display: none;">
+                                        <div class="chatooly-slider-label">
+                                            <span>Cycle Speed</span>
+                                            <span class="chatooly-slider-value" id="gradient-cycle-speed-value">1.0</span>
+                                        </div>
+                                        <input type="range" class="chatooly-slider" id="gradient-cycle-speed" min="0.1" max="5" step="0.1" value="1">
+                                    </div>
+                                    <div class="chatooly-slider-group" id="lerp-steps-group" style="display: none;">
+                                        <div class="chatooly-slider-label">
+                                            <span>Steps Between Gradients</span>
+                                            <span class="chatooly-slider-value" id="lerp-steps-value">8</span>
+                                        </div>
+                                        <input type="range" class="chatooly-slider" id="lerp-steps" min="2" max="15" step="1" value="8">
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- End of gradient-controls-section -->
+
+                            <!-- Lighting Section -->
+                            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--chatooly-color-border);">
+                                <label class="chatooly-input-label" style="margin-bottom: 8px;">Lighting</label>
+
+                                <!-- Light Color -->
+                                <div class="chatooly-color-group" style="margin-bottom: 8px;">
+                                    <label class="chatooly-color-label" for="light-color">Light Color</label>
+                                    <input type="color" class="chatooly-color-input" id="light-color" value="#ffffff">
+                                </div>
+
+                                <!-- Light Position -->
+                                <div class="chatooly-slider-group">
+                                    <div class="chatooly-slider-label">
+                                        <span>Light Position</span>
+                                        <span class="chatooly-slider-value" id="light-position-value">0.5</span>
+                                    </div>
+                                    <input type="range" class="chatooly-slider" id="light-position" min="0" max="1" step="0.05" value="0.5">
+                                </div>
+
+                                <!-- Light Intensity -->
+                                <div class="chatooly-slider-group">
+                                    <div class="chatooly-slider-label">
+                                        <span>Light Intensity</span>
+                                        <span class="chatooly-slider-value" id="light-intensity-value">1.0</span>
+                                    </div>
+                                    <input type="range" class="chatooly-slider" id="light-intensity" min="0" max="2" step="0.1" value="1">
+                                </div>
+
+                                <!-- Rim Light -->
+                                <div style="margin-top: 8px;">
+                                    <div class="chatooly-toggle-group">
+                                        <button type="button" class="chatooly-toggle" id="rim-enabled" role="switch" aria-pressed="true">
+                                            <span class="chatooly-toggle-slider"></span>
+                                        </button>
+                                        <label class="chatooly-toggle-label">Rim Light</label>
+                                    </div>
+                                    <div id="rim-controls">
+                                        <div class="chatooly-color-group" style="margin-bottom: 8px;">
+                                            <label class="chatooly-color-label" for="rim-color">Rim Color</label>
+                                            <input type="color" class="chatooly-color-input" id="rim-color" value="#ffffff">
+                                        </div>
+                                        <div class="chatooly-slider-group">
+                                            <div class="chatooly-slider-label">
+                                                <span>Rim Intensity</span>
+                                                <span class="chatooly-slider-value" id="rim-intensity-value">0.5</span>
+                                            </div>
+                                            <input type="range" class="chatooly-slider" id="rim-intensity" min="0" max="2" step="0.1" value="0.5">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section: Movement & Physics -->
                 <div class="chatooly-section-card" data-section="movement">
                     <h3 class="chatooly-section-header">Movement & Physics</h3>
                     <div class="chatooly-section-content">
@@ -339,110 +486,101 @@
                                 </div>
                                 <input type="range" class="chatooly-slider" id="tumble-speed" min="0.1" max="10" step="0.1" value="1">
                             </div>
+
+                            <!-- Look at Mouse Toggle -->
+                            <div class="chatooly-toggle-group">
+                                <button type="button" class="chatooly-toggle" id="look-at-mouse-enabled" role="switch" aria-pressed="false">
+                                    <span class="chatooly-toggle-slider"></span>
+                                </button>
+                                <label class="chatooly-toggle-label">Look at Mouse (Animation)</label>
+                            </div>
+                            <!-- Look at Mouse Controls (hidden by default) -->
+                            <div id="look-at-mouse-controls" style="display: none;">
+                                <div class="chatooly-slider-group">
+                                    <div class="chatooly-slider-label">
+                                        <span>Look Strength</span>
+                                        <span class="chatooly-slider-value" id="look-at-mouse-strength-value">0.1</span>
+                                    </div>
+                                    <input type="range" class="chatooly-slider" id="look-at-mouse-strength" min="0.01" max="0.5" step="0.01" value="0.1">
+                                </div>
+                                <label class="chatooly-input-label" style="margin-top: 8px; margin-bottom: 8px; font-weight: 600; font-size: 11px; text-transform: uppercase; opacity: 0.7;">Look Rotation Limits</label>
+                                <!-- Left/Right side by side -->
+                                <div style="display: flex; gap: 8px;">
+                                    <div class="chatooly-slider-group" style="flex: 1;">
+                                        <div class="chatooly-slider-label">
+                                            <span>Left</span>
+                                            <span class="chatooly-slider-value" id="look-at-max-left-value">72</span>
+                                        </div>
+                                        <input type="range" class="chatooly-slider" id="look-at-max-left" min="0" max="360" value="72">
+                                    </div>
+                                    <div class="chatooly-slider-group" style="flex: 1;">
+                                        <div class="chatooly-slider-label">
+                                            <span>Right</span>
+                                            <span class="chatooly-slider-value" id="look-at-max-right-value">72</span>
+                                        </div>
+                                        <input type="range" class="chatooly-slider" id="look-at-max-right" min="0" max="360" value="72">
+                                    </div>
+                                </div>
+                                <!-- Up/Down side by side -->
+                                <div style="display: flex; gap: 8px;">
+                                    <div class="chatooly-slider-group" style="flex: 1;">
+                                        <div class="chatooly-slider-label">
+                                            <span>Up</span>
+                                            <span class="chatooly-slider-value" id="look-at-max-up-value">45</span>
+                                        </div>
+                                        <input type="range" class="chatooly-slider" id="look-at-max-up" min="0" max="360" value="45">
+                                    </div>
+                                    <div class="chatooly-slider-group" style="flex: 1;">
+                                        <div class="chatooly-slider-label">
+                                            <span>Down</span>
+                                            <span class="chatooly-slider-value" id="look-at-max-down-value">45</span>
+                                        </div>
+                                        <input type="range" class="chatooly-slider" id="look-at-max-down" min="0" max="360" value="45">
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Section 6: Material (MatCap Style) -->
-                <div class="chatooly-section-card" data-section="material">
-                    <h3 class="chatooly-section-header">Material (MatCap)</h3>
+                <!-- Section: Custom Cursor -->
+                <div class="chatooly-section-card" data-section="cursor">
+                    <h3 class="chatooly-section-header">Custom Cursor</h3>
                     <div class="chatooly-section-content">
                         <!-- Enable Toggle -->
                         <div class="chatooly-toggle-group">
-                            <button type="button" class="chatooly-toggle" id="material-enabled" role="switch" aria-pressed="false">
+                            <button type="button" class="chatooly-toggle" id="cursor-enabled" role="switch" aria-pressed="false">
                                 <span class="chatooly-toggle-slider"></span>
                             </button>
-                            <label class="chatooly-toggle-label">Gradient Material</label>
+                            <label class="chatooly-toggle-label">Show Custom Cursor</label>
                         </div>
 
-                        <!-- Material Controls (hidden by default) -->
-                        <div id="material-controls-group" style="display: none;">
-
-                            <!-- Shader Mode (at top, shared across all gradients) -->
-                            <div class="chatooly-input-group">
-                                <label class="chatooly-input-label" for="shader-mode">Shader Mode</label>
-                                <select class="chatooly-select" id="shader-mode">
-                                    <option value="reflective">Reflective</option>
-                                    <option value="toon">Toon</option>
-                                </select>
+                        <!-- Cursor Controls (hidden by default) -->
+                        <div id="cursor-controls-group" style="display: none;">
+                            <!-- Cursor Image Upload -->
+                            <div class="chatooly-upload-area" style="height: 80px; margin-top: 8px;">
+                                <div class="chatooly-upload-icon">
+                                    <svg viewBox="0 0 11 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M7.94444 0L11 3V11.4048C10.9998 11.5627 10.9358 11.7141 10.822 11.8257C10.7083 11.9373 10.554 12 10.3932 12H0.606833C0.446342 11.9989 0.292733 11.9359 0.179189 11.8245C0.0656443 11.7131 0.00128006 11.5624 0 11.4048V0.5952C0 0.2664 0.271944 0 0.606833 0H7.94444ZM6.11111 6H7.94444L5.5 3.6L3.05556 6H4.88889V8.4H6.11111V6Z" fill="var(--fill-0, #454545)"/>
+                                    </svg>
+                                </div>
+                                <div class="chatooly-upload-text">Upload Cursor Image</div>
+                                <input type="file" class="chatooly-upload-input" id="cursor-upload" accept="image/*">
                             </div>
 
-                            <!-- Gradients List Container -->
-                            <div id="gradients-list-container" style="margin-top: 12px;">
-                                <!-- Dynamically populated gradient list items -->
+                            <!-- Cursor Preview -->
+                            <div id="cursor-preview-container" style="display: none; margin-top: 8px; text-align: center;">
+                                <img id="cursor-preview-img" style="max-width: 64px; max-height: 64px; border: 1px solid var(--chatooly-color-border); border-radius: 4px;">
+                                <button class="chatooly-btn" id="clear-cursor" style="display: block; margin: 8px auto 0; padding: 4px 12px;">Clear</button>
                             </div>
 
-                            <!-- Add Gradient Button -->
-                            <button class="chatooly-btn" id="add-gradient-btn" style="width: 100%; margin-top: 8px;">+ Add Gradient</button>
-
-                            <!-- Multi-Gradient Mode Section (hidden when only 1 gradient) -->
-                            <div id="multi-gradient-section" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--chatooly-color-border);">
-                                <div class="chatooly-input-group">
-                                    <label class="chatooly-input-label" for="multi-gradient-mode">Multi-Gradient Mode</label>
-                                    <select class="chatooly-select" id="multi-gradient-mode">
-                                        <option value="random">Random per spawn</option>
-                                        <option value="time">Change over time</option>
-                                    </select>
+                            <!-- Cursor Size Slider -->
+                            <div class="chatooly-slider-group" style="margin-top: 12px;">
+                                <div class="chatooly-slider-label">
+                                    <span>Cursor Size</span>
+                                    <span class="chatooly-slider-value" id="cursor-size-value">32</span>
                                 </div>
-                                <div class="chatooly-slider-group" id="cycle-speed-group" style="display: none;">
-                                    <div class="chatooly-slider-label">
-                                        <span>Cycle Speed</span>
-                                        <span class="chatooly-slider-value" id="gradient-cycle-speed-value">1.0</span>
-                                    </div>
-                                    <input type="range" class="chatooly-slider" id="gradient-cycle-speed" min="0.1" max="5" step="0.1" value="1">
-                                </div>
-                            </div>
-
-                            <!-- Lighting Section -->
-                            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--chatooly-color-border);">
-                                <label class="chatooly-input-label" style="margin-bottom: 8px;">Lighting</label>
-
-                                <!-- Light Color -->
-                                <div class="chatooly-color-group" style="margin-bottom: 8px;">
-                                    <label class="chatooly-color-label" for="light-color">Light Color</label>
-                                    <input type="color" class="chatooly-color-input" id="light-color" value="#ffffff">
-                                </div>
-
-                                <!-- Light Position -->
-                                <div class="chatooly-slider-group">
-                                    <div class="chatooly-slider-label">
-                                        <span>Light Position</span>
-                                        <span class="chatooly-slider-value" id="light-position-value">0.5</span>
-                                    </div>
-                                    <input type="range" class="chatooly-slider" id="light-position" min="0" max="1" step="0.05" value="0.5">
-                                </div>
-
-                                <!-- Light Intensity -->
-                                <div class="chatooly-slider-group">
-                                    <div class="chatooly-slider-label">
-                                        <span>Light Intensity</span>
-                                        <span class="chatooly-slider-value" id="light-intensity-value">1.0</span>
-                                    </div>
-                                    <input type="range" class="chatooly-slider" id="light-intensity" min="0" max="2" step="0.1" value="1">
-                                </div>
-
-                                <!-- Rim Light -->
-                                <div style="margin-top: 8px;">
-                                    <div class="chatooly-toggle-group">
-                                        <button type="button" class="chatooly-toggle" id="rim-enabled" role="switch" aria-pressed="true">
-                                            <span class="chatooly-toggle-slider"></span>
-                                        </button>
-                                        <label class="chatooly-toggle-label">Rim Light</label>
-                                    </div>
-                                    <div id="rim-controls">
-                                        <div class="chatooly-color-group" style="margin-bottom: 8px;">
-                                            <label class="chatooly-color-label" for="rim-color">Rim Color</label>
-                                            <input type="color" class="chatooly-color-input" id="rim-color" value="#ffffff">
-                                        </div>
-                                        <div class="chatooly-slider-group">
-                                            <div class="chatooly-slider-label">
-                                                <span>Rim Intensity</span>
-                                                <span class="chatooly-slider-value" id="rim-intensity-value">0.5</span>
-                                            </div>
-                                            <input type="range" class="chatooly-slider" id="rim-intensity" min="0" max="2" step="0.1" value="0.5">
-                                        </div>
-                                    </div>
-                                </div>
+                                <input type="range" class="chatooly-slider" id="cursor-size" min="16" max="128" step="4" value="32">
                             </div>
                         </div>
                     </div>
@@ -452,29 +590,22 @@
                 <div class="chatooly-section-card" data-section="camera">
                     <h3 class="chatooly-section-header">Camera Control</h3>
                     <div class="chatooly-section-content">
-                        <!-- Camera Position Sliders -->
-                        <div class="chatooly-slider-group">
-                            <div class="chatooly-slider-label">
-                                <span>Camera X</span>
-                                <span class="chatooly-slider-value" id="camera-x-value">0</span>
+                        <!-- Camera Position Sliders (X and Y side by side) -->
+                        <div style="display: flex; gap: 8px;">
+                            <div class="chatooly-slider-group" style="flex: 1;">
+                                <div class="chatooly-slider-label">
+                                    <span>X</span>
+                                    <span class="chatooly-slider-value" id="camera-x-value">0</span>
+                                </div>
+                                <input type="range" class="chatooly-slider" id="camera-x" min="-20" max="20" step="0.5" value="0">
                             </div>
-                            <input type="range" class="chatooly-slider" id="camera-x" min="-20" max="20" step="0.5" value="0">
-                        </div>
-
-                        <div class="chatooly-slider-group">
-                            <div class="chatooly-slider-label">
-                                <span>Camera Y</span>
-                                <span class="chatooly-slider-value" id="camera-y-value">0</span>
+                            <div class="chatooly-slider-group" style="flex: 1;">
+                                <div class="chatooly-slider-label">
+                                    <span>Y</span>
+                                    <span class="chatooly-slider-value" id="camera-y-value">0</span>
+                                </div>
+                                <input type="range" class="chatooly-slider" id="camera-y" min="-20" max="20" step="0.5" value="0">
                             </div>
-                            <input type="range" class="chatooly-slider" id="camera-y" min="-20" max="20" step="0.5" value="0">
-                        </div>
-
-                        <div class="chatooly-slider-group">
-                            <div class="chatooly-slider-label">
-                                <span>Camera Z (Distance)</span>
-                                <span class="chatooly-slider-value" id="camera-z-value">10</span>
-                            </div>
-                            <input type="range" class="chatooly-slider" id="camera-z" min="2" max="50" step="0.5" value="10">
                         </div>
 
                         <div class="chatooly-slider-group">
