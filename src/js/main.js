@@ -937,8 +937,8 @@ function updateParticles(delta) {
             }
         }
 
-        // Apply velocity damping
-        particle.velocity.multiplyScalar(0.99);
+        // Apply velocity damping (time-independent for consistent behavior at any frame rate)
+        particle.velocity.multiplyScalar(Math.pow(0.99, delta * 60));
 
         // Update position
         particle.position.add(particle.velocity.clone().multiplyScalar(delta * 60));
@@ -1278,11 +1278,14 @@ function initBackgroundSystem() {
 
     if (transparentToggle) {
         transparentToggle.addEventListener('click', () => {
-            const isPressed = transparentToggle.getAttribute('aria-pressed') === 'true';
-            if (window.Chatooly && window.Chatooly.backgroundManager) {
-                Chatooly.backgroundManager.setTransparent(isPressed);
-            }
-            updateBackground();
+            // Defer to next tick to ensure aria-pressed is updated by toggle script first
+            setTimeout(() => {
+                const isPressed = transparentToggle.getAttribute('aria-pressed') === 'true';
+                if (window.Chatooly && window.Chatooly.backgroundManager) {
+                    Chatooly.backgroundManager.setTransparent(isPressed);
+                }
+                updateBackground();
+            }, 0);
         });
     }
 
